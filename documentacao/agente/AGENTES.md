@@ -53,15 +53,15 @@ LDAP
 
 Ler:
 
-- `docs/arquitetura/ARQUITETURA.md`
-- `docs/produto/ROTEIRO_DE_VERSOES.md`
-- `docs/dados/MODELO_DE_DADOS.md`
-- `docs/arquitetura/INTERFACE_API.md`
-- `docs/seguranca/SEGURANCA.md`
-- `docs/ux-ui/EXPERIENCIA_INTERFACE.md`
-- `docs/ux-ui/IDENTIDADE_VISUAL.md`
-- `docs/produto/AREAS_OPERACIONAIS.md`
-- `docs/produto/PADRAO_NOMENCLATURA.md`
+- `documentacao/arquitetura/ARQUITETURA.md`
+- `documentacao/produto/ROTEIRO_DE_VERSOES.md`
+- `documentacao/dados/MODELO_DE_DADOS.md`
+- `documentacao/arquitetura/INTERFACE_API.md`
+- `documentacao/seguranca/SEGURANCA.md`
+- `documentacao/ux-ui/EXPERIENCIA_INTERFACE.md`
+- `documentacao/ux-ui/IDENTIDADE_VISUAL.md`
+- `documentacao/produto/AREAS_OPERACIONAIS.md`
+- `documentacao/produto/PADRAO_NOMENCLATURA.md`
 
 ## Regra territorial
 

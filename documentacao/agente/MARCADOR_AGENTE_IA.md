@@ -11,14 +11,14 @@
 Ao encontrar esse marcador, o agente deve:
 
 1. Ler `AGENTES.md`.
-2. Ler os documentos aplicáveis em `docs/`.
+2. Ler os documentos aplicáveis em `documentacao/`.
 3. Usar português em todos os nomes criados pela equipe.
 4. Respeitar a identidade visual institucional.
 5. Respeitar o roteiro de versões.
 6. Não inventar áreas operacionais.
 7. Usar áreas territoriais versionadas no banco.
 8. Diferenciar dados reais, históricos agregados e demonstrativos.
-9. Registrar decisões estruturais em `docs/adr/`.
+9. Registrar decisões estruturais em `documentacao/adr/`.
 10. Marcar dúvidas como `DECISAO_PENDENTE_HOMOLOGACAO`.
 
 ## Bloco curto

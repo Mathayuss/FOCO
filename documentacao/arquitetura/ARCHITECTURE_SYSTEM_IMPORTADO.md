@@ -92,4 +92,4 @@ Consultar também:
 - `MODELO_DE_DADOS.md`
 - `SEGURANCA.md`
 - `ROTEIRO_DE_VERSOES.md`
-- `docs/adr/`
+- `documentacao/adr/`

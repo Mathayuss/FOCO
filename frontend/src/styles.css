@@ -30,6 +30,7 @@ body{margin:0;background:var(--foco-bg);min-width:960px;color:var(--foco-text)}
 button,select{font:inherit}
 button{cursor:pointer}
 button:disabled{cursor:not-allowed}
+button:focus-visible,select:focus-visible{outline:2px solid rgba(255,204,41,.5);outline-offset:2px}
 .app{min-height:100vh;background:linear-gradient(180deg,#101114 0%,#0d0e11 100%)}
 
 .sidebar{position:fixed;left:0;top:0;bottom:0;width:236px;background:var(--foco-side);border-right:1px solid var(--foco-border);display:flex;flex-direction:column;z-index:20}
@@ -95,7 +96,7 @@ main{margin-left:236px;min-width:0}
 .panel,.uploadPanel,.statusPanel,.placeholderCard{border:1px solid var(--foco-border);background:var(--foco-surface-1);border-radius:8px;box-shadow:var(--shadow-panel);min-width:0;overflow:hidden}
 .panel>header{height:50px;border-bottom:1px solid var(--foco-border);padding:0 13px;display:flex;align-items:center;background:#15171b}.panel>header b{font-size:9px;text-transform:uppercase;letter-spacing:.8px;color:#dfe3e8}.panel>header small{display:block;font-size:7px;color:var(--foco-text-soft);margin-top:2px}.panelBody{min-height:285px}
 
-.map{height:330px;width:100%;background:#0f1115}.leaflet-container{font-family:Arial,Helvetica,sans-serif}.leaflet-container a{color:#3d6ea3}
+.map{height:330px;width:100%;background:#0f1115}.map .leaflet-interactive{cursor:pointer}.leaflet-container{font-family:Arial,Helvetica,sans-serif}.leaflet-container a{color:#3d6ea3}
 .errorBox{padding:16px;border:1px solid rgba(255,93,98,.42);color:#ffc4c6;background:rgba(255,93,98,.08);border-radius:8px;font-size:11px;line-height:1.5}
 .emptyState{height:100%;min-height:210px;display:grid;place-items:center;color:var(--foco-text-soft);font-size:11px;background:#14161a}
 

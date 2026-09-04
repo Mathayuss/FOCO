@@ -220,4 +220,4 @@ Futuro:
 - tracing.
 
 ## 12. Decisões arquiteturais
-Decisões relevantes devem ser registradas em `docs/adr/`.
+Decisões relevantes devem ser registradas em `documentacao/adr/`.

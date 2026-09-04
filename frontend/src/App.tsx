@@ -15,6 +15,9 @@ const TypificationPage = lazy(() => import("./pages/AnalyticsPages").then(module
 const UnitsPage = lazy(() => import("./pages/AnalyticsPages").then(module => ({ default: module.UnitsPage })))
 
 const FILTER_STORAGE_KEY = "foco.globalFilters.v03"
+const PAGE_STORAGE_KEY = "foco.activePage.v03"
+const PAGE_NAMES = ["Visão Geral","Evolução","Tipificação","Temporal","Território","SLA","Viaturas","Unidades","Importações","Integrações","Qualidade","Configurações"]
+
 type ApiStatus = "checking" | "online" | "offline"
 
 function loadGlobalFilters(): GlobalFilters {
@@ -28,6 +31,15 @@ function loadGlobalFilters(): GlobalFilters {
  }
 }
 
+function loadActivePage(){
+ try {
+  const page = window.localStorage.getItem(PAGE_STORAGE_KEY) || ""
+  return PAGE_NAMES.includes(page) ? page : "Visão Geral"
+ } catch {
+  return "Visão Geral"
+ }
+}
+
 function apiStatusLabel(status:ApiStatus){
  if(status === "online") return "API online"
  if(status === "offline") return "API offline"
@@ -35,7 +47,7 @@ function apiStatusLabel(status:ApiStatus){
 }
 
 export default function App(){
- const [active,setActive]=useState("Visão Geral")
+ const [active,setActive]=useState(loadActivePage)
  const [globalFilters,setGlobalFiltersState]=useState<GlobalFilters>(loadGlobalFilters)
  const [apiStatus,setApiStatus]=useState<ApiStatus>("checking")
  const [fullscreen,setFullscreen]=useState(Boolean(document.fullscreenElement))
@@ -44,6 +56,8 @@ export default function App(){
  const setGlobalFilters:SetGlobalFilters=(patch)=>setGlobalFiltersState(prev=>({...prev,...patch}))
  const clearGlobalFilters=()=>setGlobalFiltersState(defaultGlobalFilters)
  useEffect(()=>{window.localStorage.setItem(FILTER_STORAGE_KEY,JSON.stringify(globalFilters))},[globalFilters])
+ useEffect(()=>{window.localStorage.setItem(PAGE_STORAGE_KEY,active)},[active])
+ useEffect(()=>{document.title=`FOCO - ${active}`},[active])
  useEffect(()=>{
   const syncFullscreen=()=>setFullscreen(Boolean(document.fullscreenElement))
   document.addEventListener("fullscreenchange",syncFullscreen)

@@ -1,6 +1,6 @@
 # Documentação do FOCO
 
-Esta pasta concentra a documentação técnica, normativa e operacional do FOCO. A raiz do projeto deve ficar reservada para arquivos de execução, configuração e orientação principal.
+Esta pasta `documentacao/` concentra a documentação técnica, normativa e operacional do FOCO. A raiz do projeto deve ficar reservada para arquivos de execução, configuração e orientação principal.
 
 ## Estrutura
 

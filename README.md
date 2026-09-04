@@ -42,7 +42,7 @@ Observacao: executar o backend a partir de `backend/` usa SQLite local. Executar
 ```text
 backend/   API FastAPI, serviços, modelos, schemas, dados e testes
 frontend/  Aplicação React + TypeScript/Vite
-docs/      Documentação organizada por área
+documentacao/ Documentação organizada por área
 ```
 
-A documentação principal está indexada em `docs/README.md`.
+A documentação principal está indexada em `documentacao/README.md`.
