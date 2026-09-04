@@ -1,0 +1,5 @@
+{
+  "name": "foco",
+  "private": true,
+  "workspaces": ["frontend"]
+}

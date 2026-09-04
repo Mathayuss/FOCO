@@ -1,0 +1,868 @@
+{
+  "total": 46686,
+  "tip": [
+    {
+      "nome": "Emergência Clínica",
+      "total": 9367,
+      "pct": 20.1
+    },
+    {
+      "nome": "Sinistro de Trânsito",
+      "total": 7125,
+      "pct": 15.3
+    },
+    {
+      "nome": "Remoção / Transporte",
+      "total": 6767,
+      "pct": 14.5
+    },
+    {
+      "nome": "Demais tipificações",
+      "total": 3720,
+      "pct": 8.0
+    },
+    {
+      "nome": "Queda / Acidente",
+      "total": 3657,
+      "pct": 7.8
+    },
+    {
+      "nome": "Controle Animais/Insetos",
+      "total": 3123,
+      "pct": 6.7
+    },
+    {
+      "nome": "Incêndio",
+      "total": 2865,
+      "pct": 6.1
+    },
+    {
+      "nome": "Vistoria Técnica",
+      "total": 2391,
+      "pct": 5.1
+    },
+    {
+      "nome": "Emergência Psiquiátrica",
+      "total": 2129,
+      "pct": 4.6
+    },
+    {
+      "nome": "Instrução/Prevenção",
+      "total": 1879,
+      "pct": 4.0
+    },
+    {
+      "nome": "Agressão / Violência",
+      "total": 1270,
+      "pct": 2.7
+    },
+    {
+      "nome": "Apoio a outros órgãos",
+      "total": 752,
+      "pct": 1.6
+    }
+  ],
+  "mun": [
+    {
+      "nome": "Campo Grande",
+      "total": 13338,
+      "pct": 28.6
+    },
+    {
+      "nome": "Dourados",
+      "total": 3452,
+      "pct": 7.4
+    },
+    {
+      "nome": "Ponta Porã",
+      "total": 1932,
+      "pct": 4.1
+    },
+    {
+      "nome": "Costa Rica",
+      "total": 1763,
+      "pct": 3.8
+    },
+    {
+      "nome": "Aparecida do Taboado",
+      "total": 1689,
+      "pct": 3.6
+    },
+    {
+      "nome": "Corumbá",
+      "total": 1621,
+      "pct": 3.5
+    },
+    {
+      "nome": "Três Lagoas",
+      "total": 1431,
+      "pct": 3.1
+    },
+    {
+      "nome": "Chapadão do Sul",
+      "total": 1381,
+      "pct": 3.0
+    },
+    {
+      "nome": "Fátima do Sul",
+      "total": 1319,
+      "pct": 2.8
+    },
+    {
+      "nome": "Paranaíba",
+      "total": 1204,
+      "pct": 2.6
+    },
+    {
+      "nome": "Amambai",
+      "total": 1180,
+      "pct": 2.5
+    },
+    {
+      "nome": "Mundo Novo",
+      "total": 1163,
+      "pct": 2.5
+    },
+    {
+      "nome": "Maracaju",
+      "total": 1089,
+      "pct": 2.3
+    },
+    {
+      "nome": "Coxim",
+      "total": 1073,
+      "pct": 2.3
+    },
+    {
+      "nome": "Naviraí",
+      "total": 1051,
+      "pct": 2.3
+    },
+    {
+      "nome": "Bonito",
+      "total": 1046,
+      "pct": 2.2
+    },
+    {
+      "nome": "São Gabriel do Oeste",
+      "total": 1025,
+      "pct": 2.2
+    },
+    {
+      "nome": "Aquidauana",
+      "total": 1012,
+      "pct": 2.2
+    },
+    {
+      "nome": "Jardim",
+      "total": 901,
+      "pct": 1.9
+    },
+    {
+      "nome": "Porto Murtinho",
+      "total": 755,
+      "pct": 1.6
+    }
+  ],
+  "cmd": [
+    {
+      "nome": "CBFron",
+      "total": 19507,
+      "pct": 42.7
+    },
+    {
+      "nome": "CMB",
+      "total": 14510,
+      "pct": 31.8
+    },
+    {
+      "nome": "CBDiv",
+      "total": 11615,
+      "pct": 25.5
+    }
+  ],
+  "hora": [
+    960,
+    758,
+    688,
+    554,
+    604,
+    741,
+    1466,
+    2139,
+    3531,
+    2929,
+    2801,
+    2442,
+    2353,
+    2481,
+    2597,
+    2532,
+    2465,
+    3108,
+    2866,
+    2461,
+    2000,
+    1705,
+    1397,
+    1108
+  ],
+  "dow": [
+    6650,
+    6440,
+    6503,
+    6876,
+    7007,
+    6636,
+    6574
+  ],
+  "turno": {
+    "Tarde": 15536,
+    "Manhã": 15308,
+    "Noite": 11537,
+    "Madrugada": 4305
+  },
+  "uni": [
+    {
+      "nome": "CMB/1ºGBM",
+      "total": 3496
+    },
+    {
+      "nome": "2º GBM",
+      "total": 3450
+    },
+    {
+      "nome": "2ºSGBM/6ºGBM",
+      "total": 2372
+    },
+    {
+      "nome": "CMB/6GBM",
+      "total": 2183
+    },
+    {
+      "nome": "4º GBM",
+      "total": 1933
+    },
+    {
+      "nome": "3º GBM",
+      "total": 1810
+    },
+    {
+      "nome": "2º SGBM/9º GBM",
+      "total": 1748
+    },
+    {
+      "nome": "4º SGBM/5º GBM",
+      "total": 1684
+    },
+    {
+      "nome": "2º SGBM/2º GBM",
+      "total": 1444
+    },
+    {
+      "nome": "5º GBM",
+      "total": 1438
+    },
+    {
+      "nome": "2º SGBM/3º GBM",
+      "total": 1406
+    },
+    {
+      "nome": "3º SGBM/5º GBM",
+      "total": 1400
+    }
+  ],
+  "regiao_cg": [
+    {
+      "nome": "Anhanduizinho",
+      "total": 2816,
+      "pct": 22.0
+    },
+    {
+      "nome": "Centro",
+      "total": 2159,
+      "pct": 16.9
+    },
+    {
+      "nome": "Segredo",
+      "total": 1920,
+      "pct": 15.0
+    },
+    {
+      "nome": "Bandeira",
+      "total": 1786,
+      "pct": 13.9
+    },
+    {
+      "nome": "Lagoa",
+      "total": 1534,
+      "pct": 12.0
+    },
+    {
+      "nome": "Prosa",
+      "total": 1321,
+      "pct": 10.3
+    },
+    {
+      "nome": "Imbirussu",
+      "total": 1277,
+      "pct": 10.0
+    }
+  ],
+  "monthly": [
+    {
+      "mes": "Jan",
+      "total": 6948,
+      "tip": [
+        {
+          "nome": "Emergência Clínica",
+          "total": 1331,
+          "pct": 19.2
+        },
+        {
+          "nome": "Remoção / Transporte",
+          "total": 937,
+          "pct": 13.5
+        },
+        {
+          "nome": "Sinistro de Trânsito",
+          "total": 897,
+          "pct": 12.9
+        },
+        {
+          "nome": "Controle Animais/Insetos",
+          "total": 661,
+          "pct": 9.5
+        },
+        {
+          "nome": "Demais tipificações",
+          "total": 589,
+          "pct": 8.5
+        },
+        {
+          "nome": "Queda / Acidente",
+          "total": 544,
+          "pct": 7.8
+        },
+        {
+          "nome": "Vistoria Técnica",
+          "total": 456,
+          "pct": 6.6
+        },
+        {
+          "nome": "Incêndio",
+          "total": 382,
+          "pct": 5.5
+        }
+      ]
+    },
+    {
+      "mes": "Fev",
+      "total": 6532,
+      "tip": [
+        {
+          "nome": "Emergência Clínica",
+          "total": 1283,
+          "pct": 19.6
+        },
+        {
+          "nome": "Sinistro de Trânsito",
+          "total": 929,
+          "pct": 14.2
+        },
+        {
+          "nome": "Remoção / Transporte",
+          "total": 921,
+          "pct": 14.1
+        },
+        {
+          "nome": "Queda / Acidente",
+          "total": 583,
+          "pct": 8.9
+        },
+        {
+          "nome": "Demais tipificações",
+          "total": 580,
+          "pct": 8.9
+        },
+        {
+          "nome": "Controle Animais/Insetos",
+          "total": 507,
+          "pct": 7.8
+        },
+        {
+          "nome": "Vistoria Técnica",
+          "total": 369,
+          "pct": 5.6
+        },
+        {
+          "nome": "Emergência Psiquiátrica",
+          "total": 301,
+          "pct": 4.6
+        }
+      ]
+    },
+    {
+      "mes": "Mar",
+      "total": 7243,
+      "tip": [
+        {
+          "nome": "Emergência Clínica",
+          "total": 1508,
+          "pct": 20.8
+        },
+        {
+          "nome": "Sinistro de Trânsito",
+          "total": 1118,
+          "pct": 15.4
+        },
+        {
+          "nome": "Remoção / Transporte",
+          "total": 1063,
+          "pct": 14.7
+        },
+        {
+          "nome": "Demais tipificações",
+          "total": 609,
+          "pct": 8.4
+        },
+        {
+          "nome": "Queda / Acidente",
+          "total": 507,
+          "pct": 7.0
+        },
+        {
+          "nome": "Controle Animais/Insetos",
+          "total": 480,
+          "pct": 6.6
+        },
+        {
+          "nome": "Vistoria Técnica",
+          "total": 401,
+          "pct": 5.5
+        },
+        {
+          "nome": "Incêndio",
+          "total": 395,
+          "pct": 5.5
+        }
+      ]
+    },
+    {
+      "mes": "Abr",
+      "total": 6388,
+      "tip": [
+        {
+          "nome": "Emergência Clínica",
+          "total": 1280,
+          "pct": 20.0
+        },
+        {
+          "nome": "Sinistro de Trânsito",
+          "total": 1007,
+          "pct": 15.8
+        },
+        {
+          "nome": "Remoção / Transporte",
+          "total": 953,
+          "pct": 14.9
+        },
+        {
+          "nome": "Queda / Acidente",
+          "total": 534,
+          "pct": 8.4
+        },
+        {
+          "nome": "Demais tipificações",
+          "total": 486,
+          "pct": 7.6
+        },
+        {
+          "nome": "Controle Animais/Insetos",
+          "total": 382,
+          "pct": 6.0
+        },
+        {
+          "nome": "Incêndio",
+          "total": 341,
+          "pct": 5.3
+        },
+        {
+          "nome": "Emergência Psiquiátrica",
+          "total": 327,
+          "pct": 5.1
+        }
+      ]
+    },
+    {
+      "mes": "Mai",
+      "total": 6272,
+      "tip": [
+        {
+          "nome": "Emergência Clínica",
+          "total": 1247,
+          "pct": 19.9
+        },
+        {
+          "nome": "Sinistro de Trânsito",
+          "total": 1088,
+          "pct": 17.3
+        },
+        {
+          "nome": "Remoção / Transporte",
+          "total": 961,
+          "pct": 15.3
+        },
+        {
+          "nome": "Demais tipificações",
+          "total": 498,
+          "pct": 7.9
+        },
+        {
+          "nome": "Queda / Acidente",
+          "total": 476,
+          "pct": 7.6
+        },
+        {
+          "nome": "Incêndio",
+          "total": 342,
+          "pct": 5.5
+        },
+        {
+          "nome": "Instrução/Prevenção",
+          "total": 338,
+          "pct": 5.4
+        },
+        {
+          "nome": "Controle Animais/Insetos",
+          "total": 333,
+          "pct": 5.3
+        }
+      ]
+    },
+    {
+      "mes": "Jun",
+      "total": 6297,
+      "tip": [
+        {
+          "nome": "Emergência Clínica",
+          "total": 1345,
+          "pct": 21.4
+        },
+        {
+          "nome": "Sinistro de Trânsito",
+          "total": 1073,
+          "pct": 17.0
+        },
+        {
+          "nome": "Remoção / Transporte",
+          "total": 966,
+          "pct": 15.3
+        },
+        {
+          "nome": "Queda / Acidente",
+          "total": 508,
+          "pct": 8.1
+        },
+        {
+          "nome": "Demais tipificações",
+          "total": 483,
+          "pct": 7.7
+        },
+        {
+          "nome": "Controle Animais/Insetos",
+          "total": 344,
+          "pct": 5.5
+        },
+        {
+          "nome": "Incêndio",
+          "total": 341,
+          "pct": 5.4
+        },
+        {
+          "nome": "Emergência Psiquiátrica",
+          "total": 258,
+          "pct": 4.1
+        }
+      ]
+    },
+    {
+      "mes": "Jul",
+      "total": 7006,
+      "tip": [
+        {
+          "nome": "Emergência Clínica",
+          "total": 1373,
+          "pct": 19.6
+        },
+        {
+          "nome": "Sinistro de Trânsito",
+          "total": 1013,
+          "pct": 14.5
+        },
+        {
+          "nome": "Remoção / Transporte",
+          "total": 966,
+          "pct": 13.8
+        },
+        {
+          "nome": "Incêndio",
+          "total": 817,
+          "pct": 11.7
+        },
+        {
+          "nome": "Queda / Acidente",
+          "total": 505,
+          "pct": 7.2
+        },
+        {
+          "nome": "Demais tipificações",
+          "total": 475,
+          "pct": 6.8
+        },
+        {
+          "nome": "Controle Animais/Insetos",
+          "total": 416,
+          "pct": 5.9
+        },
+        {
+          "nome": "Vistoria Técnica",
+          "total": 389,
+          "pct": 5.6
+        }
+      ]
+    }
+  ],
+  "comparativo": {
+    "total_2026": 46686,
+    "total_2025_jj": 45187,
+    "delta_abs": 1499,
+    "delta_pct": 3.3,
+    "mensal": [
+      {
+        "mes": "Jan",
+        "v2025": 6601,
+        "v2026": 6948,
+        "delta": 5.3
+      },
+      {
+        "mes": "Fev",
+        "v2025": 5806,
+        "v2026": 6532,
+        "delta": 12.5
+      },
+      {
+        "mes": "Mar",
+        "v2025": 6847,
+        "v2026": 7243,
+        "delta": 5.8
+      },
+      {
+        "mes": "Abr",
+        "v2025": 6269,
+        "v2026": 6388,
+        "delta": 1.9
+      },
+      {
+        "mes": "Mai",
+        "v2025": 6857,
+        "v2026": 6272,
+        "delta": -8.5
+      },
+      {
+        "mes": "Jun",
+        "v2025": 6159,
+        "v2026": 6297,
+        "delta": 2.2
+      },
+      {
+        "mes": "Jul",
+        "v2025": 6648,
+        "v2026": 7006,
+        "delta": 5.4
+      }
+    ],
+    "tip": [
+      {
+        "nome": "Busca e Salvamento",
+        "v2026": 339,
+        "v2025": 266,
+        "delta": 27.4
+      },
+      {
+        "nome": "Tentativa de Suicídio",
+        "v2026": 713,
+        "v2025": 577,
+        "delta": 23.6
+      },
+      {
+        "nome": "Apoio a outros órgãos",
+        "v2026": 752,
+        "v2025": 920,
+        "delta": -18.3
+      },
+      {
+        "nome": "Emergência Psiquiátrica",
+        "v2026": 2129,
+        "v2025": 1824,
+        "delta": 16.7
+      },
+      {
+        "nome": "Queda / Acidente",
+        "v2026": 3657,
+        "v2025": 3228,
+        "delta": 13.3
+      },
+      {
+        "nome": "Demais tipificações",
+        "v2026": 3720,
+        "v2025": 4096,
+        "delta": -9.2
+      },
+      {
+        "nome": "Emergência Clínica",
+        "v2026": 9367,
+        "v2025": 8679,
+        "delta": 7.9
+      },
+      {
+        "nome": "Instrução/Prevenção",
+        "v2026": 1879,
+        "v2025": 2024,
+        "delta": -7.2
+      }
+    ],
+    "mun": [
+      {
+        "nome": "Campo Grande",
+        "v2026": 13338,
+        "v2025": 12064,
+        "delta": 10.6
+      },
+      {
+        "nome": "Dourados",
+        "v2026": 3452,
+        "v2025": 2733,
+        "delta": 26.3
+      },
+      {
+        "nome": "Ponta Porã",
+        "v2026": 1932,
+        "v2025": 1749,
+        "delta": 10.5
+      },
+      {
+        "nome": "Costa Rica",
+        "v2026": 1763,
+        "v2025": 1019,
+        "delta": 73.0
+      },
+      {
+        "nome": "Aparecida do Taboado",
+        "v2026": 1689,
+        "v2025": 1549,
+        "delta": 9.0
+      },
+      {
+        "nome": "Corumbá",
+        "v2026": 1621,
+        "v2025": 1342,
+        "delta": 20.8
+      },
+      {
+        "nome": "Três Lagoas",
+        "v2026": 1431,
+        "v2025": 1587,
+        "delta": -9.8
+      },
+      {
+        "nome": "Chapadão do Sul",
+        "v2026": 1381,
+        "v2025": 1451,
+        "delta": -4.8
+      }
+    ]
+  },
+  "coords": {
+    "Campo Grande": [
+      -20.4697,
+      -54.6201
+    ],
+    "Dourados": [
+      -22.2231,
+      -54.812
+    ],
+    "Ponta Porã": [
+      -22.5361,
+      -55.7256
+    ],
+    "Costa Rica": [
+      -18.5432,
+      -53.1285
+    ],
+    "Aparecida do Taboado": [
+      -20.0863,
+      -51.0961
+    ],
+    "Corumbá": [
+      -19.008,
+      -57.651
+    ],
+    "Três Lagoas": [
+      -20.751,
+      -51.678
+    ],
+    "Chapadão do Sul": [
+      -18.793,
+      -52.626
+    ],
+    "Fátima do Sul": [
+      -22.375,
+      -54.513
+    ],
+    "Paranaíba": [
+      -19.677,
+      -51.19
+    ],
+    "Naviraí": [
+      -23.061,
+      -54.199
+    ],
+    "Aquidauana": [
+      -20.471,
+      -55.787
+    ],
+    "Coxim": [
+      -18.506,
+      -54.76
+    ],
+    "Bonito": [
+      -21.126,
+      -56.483
+    ],
+    "Maracaju": [
+      -21.615,
+      -55.168
+    ],
+    "Nova Andradina": [
+      -22.238,
+      -53.344
+    ],
+    "São Gabriel do Oeste": [
+      -19.395,
+      -54.566
+    ],
+    "Jardim": [
+      -21.479,
+      -56.148
+    ],
+    "Amambai": [
+      -23.105,
+      -55.225
+    ],
+    "Mundo Novo": [
+      -23.934,
+      -54.281
+    ]
+  }
+}

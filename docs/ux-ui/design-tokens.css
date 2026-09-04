@@ -1,0 +1,41 @@
+:root {
+  /* Cores institucionais — Manual de Identidade Visual */
+  --foco-goles: #D83135;
+  --foco-jalde: #FFCC29;
+
+  /* Neutros do produto — não são cores heráldicas */
+  --foco-bg: #101114;
+  --foco-surface-1: #17191d;
+  --foco-surface-2: #202329;
+  --foco-border: #30343b;
+  --foco-text: #f4f5f6;
+  --foco-text-muted: #aeb4bd;
+
+  /* Estados funcionais */
+  --foco-success: #3fb950;
+  --foco-info: #58a6ff;
+  --foco-warning: var(--foco-jalde);
+  --foco-danger: #ff5d62;
+
+  /* Tipografia: usar TheMix somente quando licenciada/disponibilizada */
+  --foco-font-ui: Arial, Helvetica, sans-serif;
+  --foco-font-heading: "Arial Black", Arial, Helvetica, sans-serif;
+
+  --foco-radius-sm: 6px;
+  --foco-radius-md: 10px;
+  --foco-radius-lg: 14px;
+
+  --foco-space-1: 4px;
+  --foco-space-2: 8px;
+  --foco-space-3: 12px;
+  --foco-space-4: 16px;
+  --foco-space-5: 24px;
+  --foco-space-6: 32px;
+}
+
+/*
+  Marca oficial:
+  - não recriar via CSS;
+  - usar somente ativos institucionais aprovados;
+  - respeitar proporção e área protetiva.
+*/
