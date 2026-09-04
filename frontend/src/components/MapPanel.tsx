@@ -9,7 +9,7 @@ export default function MapPanel({cities,selected=""}:{cities:NamedMetric[];sele
   <TileLayer attribution="&copy; OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/>
   {cities.filter(c=>c.lat!=null&&c.lon!=null).map(c=>{
    const active = c.nome === selected
-   return <CircleMarker key={c.nome} center={[c.lat!,c.lon!]} radius={Math.max(active?9:6,Math.min(active?30:26,Math.sqrt(c.total)/5))} pathOptions={{color:active?"#ffcc29":"#ef5056",fillColor:active?"#ffcc29":"#d83135",fillOpacity:active ? .72 : .55,weight:active?3:1}}><Popup><b>{c.nome}</b><br/>{c.total.toLocaleString("pt-BR")} ocorrências</Popup></CircleMarker>
+   return <CircleMarker key={c.nome} center={[c.lat!,c.lon!]} radius={Math.max(active?9:6,Math.min(active?30:26,Math.sqrt(c.total)/5))} pathOptions={{color:active?"#ffcc29":"#d83135",fillColor:active?"#ffcc29":"#d83135",fillOpacity:active ? .72 : .55,weight:active?3:1}}><Popup><b>{c.nome}</b><br/>{c.total.toLocaleString("pt-BR")} ocorrências</Popup></CircleMarker>
   })}
  </MapContainer>
 }

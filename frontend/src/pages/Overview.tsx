@@ -9,7 +9,7 @@ import MapPanel from "../components/MapPanel"
 
 const fmt=(n:number)=>n.toLocaleString("pt-BR")
 const dec=(n:number)=>n.toFixed(1).replace(".",",")
-const axis={axisLine:{lineStyle:{color:"#42364b"}},axisLabel:{color:"#817489",fontSize:10},splitLine:{lineStyle:{color:"#2a2030"}}}
+const axis={axisLine:{lineStyle:{color:"#3a4049"}},axisLabel:{color:"#aeb4bd",fontSize:10},splitLine:{lineStyle:{color:"#2b3037"}}}
 const fallbackPeriods=[{key:"all",label:"Jan-Jul/2026",months:["Jan","Fev","Mar","Abr","Mai","Jun","Jul"]}]
 const filterLabels:Record<string,string>={municipality:"Município",unit:"Unidade",subtype:"Subtipo",shift:"Turno",period:"Período",type:"Tipo"}
 
@@ -44,12 +44,12 @@ export default function Overview({globalFilters,setGlobalFilters,clearGlobalFilt
  const missingTypeMonths=ov?.coverage?.missing_type_months || []
  const typeEvents={click:(p:any)=>{ if(p?.name) setGlobalFilters({type:String(p.name)}) }}
  const monthlyOption=useMemo(()=>{
-  const series:any[]=[{name:"2026",type:"line",data:months.map(x=>x.total),smooth:true,symbolSize:7,lineStyle:{width:3,color:"#e85057"},itemStyle:{color:"#ffcc29"},areaStyle:{color:{type:"linear",x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:"rgba(216,49,53,.32)"},{offset:1,color:"rgba(216,49,53,.02)"}]}}}]
-  if(hasComparison) series.unshift({name:"2025",type:"line",data:comparison.map(x=>x.v2025),smooth:true,symbolSize:5,lineStyle:{width:2,color:"#35d0d8",type:"dashed"},itemStyle:{color:"#35d0d8"}})
-  return {tooltip:{trigger:"axis"},legend:{show:hasComparison,top:0,right:12,textStyle:{color:"#91849a",fontSize:10}},grid:{left:38,right:14,top:hasComparison?34:20,bottom:30},xAxis:{type:"category",data:months.map(x=>x.mes),...axis},yAxis:{type:"value",...axis},series}
+  const series:any[]=[{name:"2026",type:"line",data:months.map(x=>x.total),smooth:true,symbolSize:7,lineStyle:{width:3,color:"#d83135"},itemStyle:{color:"#ffcc29"},areaStyle:{color:{type:"linear",x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:"rgba(216,49,53,.32)"},{offset:1,color:"rgba(216,49,53,.02)"}]}}}]
+  if(hasComparison) series.unshift({name:"2025",type:"line",data:comparison.map(x=>x.v2025),smooth:true,symbolSize:5,lineStyle:{width:2,color:"#58a6ff",type:"dashed"},itemStyle:{color:"#58a6ff"}})
+  return {tooltip:{trigger:"axis"},legend:{show:hasComparison,top:0,right:12,textStyle:{color:"#aeb4bd",fontSize:10}},grid:{left:38,right:14,top:hasComparison?34:20,bottom:30},xAxis:{type:"category",data:months.map(x=>x.mes),...axis},yAxis:{type:"value",...axis},series}
  },[months,comparison,hasComparison])
- const typeOption=useMemo(()=>({tooltip:{trigger:"item"},grid:{left:135,right:20,top:8,bottom:20},xAxis:{type:"value",...axis},yAxis:{type:"category",inverse:true,data:types.slice(0,7).map(x=>x.nome),...axis,axisLabel:{color:"#9c8fa4",fontSize:9,width:120,overflow:"truncate"}},series:[{type:"bar",data:types.slice(0,7).map(x=>x.total),barWidth:10,itemStyle:{borderRadius:6,color:(p:any)=>types[p.dataIndex]?.nome===typeFilter?"#ffcc29":"#d83135"}}]}),[types,typeFilter])
- const hourOption=useMemo(()=>({tooltip:{trigger:"axis"},grid:{left:35,right:12,top:16,bottom:28},xAxis:{type:"category",data:hours.map((_,i)=>String(i).padStart(2,"0")), ...axis},yAxis:{type:"value",...axis},series:[{type:"bar",data:hours,barWidth:"62%",itemStyle:{color:(p:any)=>p.dataIndex>=7&&p.dataIndex<=18?"#d83135":"#44324d",borderRadius:[3,3,0,0]}}]}),[hours])
+ const typeOption=useMemo(()=>({tooltip:{trigger:"item"},grid:{left:135,right:20,top:8,bottom:20},xAxis:{type:"value",...axis},yAxis:{type:"category",inverse:true,data:types.slice(0,7).map(x=>x.nome),...axis,axisLabel:{color:"#aeb4bd",fontSize:9,width:120,overflow:"truncate"}},series:[{type:"bar",data:types.slice(0,7).map(x=>x.total),barWidth:10,itemStyle:{borderRadius:6,color:(p:any)=>types[p.dataIndex]?.nome===typeFilter?"#ffcc29":"#d83135"}}]}),[types,typeFilter])
+ const hourOption=useMemo(()=>({tooltip:{trigger:"axis"},grid:{left:35,right:12,top:16,bottom:28},xAxis:{type:"category",data:hours.map((_,i)=>String(i).padStart(2,"0")), ...axis},yAxis:{type:"value",...axis},series:[{type:"bar",data:hours,barWidth:"62%",itemStyle:{color:(p:any)=>p.dataIndex>=7&&p.dataIndex<=18?"#d83135":"#343a44",borderRadius:[3,3,0,0]}}]}),[hours])
  if(error)return <div className="errorBox">{error}</div>
  return <>
   <div className="pageHead"><div><div className="eyebrow">DASHBOARD / HOME</div><h1>Visão Geral</h1><p>Panorama consolidado de ocorrências e indicadores operacionais do MVP.</p></div><span className="badge">v0.3 · BI FUNCIONAL</span></div>
@@ -62,7 +62,7 @@ export default function Overview({globalFilters,setGlobalFilters,clearGlobalFilt
    <KpiCard label="Média diária" value={loading?"-":dec(ov?.average_per_day||0)} meta={partialTypeSeries?"calculada sobre mínimo conhecido":"calculada pela API com dias reais"}/>
    <KpiCard label="Variação" value={ov?.delta_pct==null?"sem base":`${ov.delta_pct>0?"+":""}${dec(ov.delta_pct)}%`} meta={hasComparison?"comparação com 2025 no período":"comparação indisponível para este recorte"} tone="gold"/>
    <KpiCard label="SLA demonstrativo" value={sla?`${dec(sla.compliance_pct)}%`:"-"} meta={sla?`${sla.computable}/${sla.sample_size} registros calculáveis`:"carregando"} tone="green"/>
-   <KpiCard label="Maior demanda" value={ov?.top_type||"-"} meta={ov?.top_municipality||"carregando"} tone="purple"/>
+   <KpiCard label="Maior demanda" value={ov?.top_type||"-"} meta={ov?.top_municipality||"carregando"} tone="neutral"/>
   </div>
   <div className="grid twoOne"><Panel title="Evolução das ocorrências" sub={partialTypeSeries?"Série parcial: meses ausentes sem valor conhecido":hasComparison?"Comparativo mensal 2025 x 2026":typeFilter?`Filtro API: ${typeFilter}`:"Filtro API: período"}><ReactECharts option={monthlyOption} style={{height:285}}/></Panel><Panel title="Principais tipificações" sub="Clique em uma barra para filtrar"><ReactECharts option={typeOption} onEvents={typeEvents} style={{height:285}}/></Panel></div>
   <div className="grid twoOne"><Panel title="Concentração territorial" sub={hasRequestedLimited?"Seleção contextual; consolidado geral sem cruzamento":"Mapa consolidado por município"}><MapPanel cities={cities.slice(0,20)} selected={municipality}/></Panel><Panel title="Ocorrências por hora" sub={hasRequestedLimited?"Consolidado geral: sem cruzamento disponível":"Perfil horário consolidado"}><ReactECharts option={hourOption} style={{height:330}}/></Panel></div>
