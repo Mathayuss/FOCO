@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react"
 import ReactECharts from "echarts-for-react"
 import { ApiError, api, type AnalyticsParams } from "../api"
 import { toAnalyticsParams, type GlobalFilters, type SetGlobalFilters } from "../filterState"
-import type { ApiList, AvailableFilters, MonthlyComparison, MonthlyItem, NamedMetric, Overview as OverviewType, Sla } from "../types"
+import type { ApiList, AvailableFilters, MonthlyComparison, MonthlyItem, NamedMetric, Overview as OverviewType, PeriodOption, Sla } from "../types"
 import KpiCard from "../components/KpiCard"
 import MapPanel from "../components/MapPanel"
 import Panel from "../components/Panel"
@@ -10,8 +10,13 @@ import Panel from "../components/Panel"
 const fmt=(n:number)=>n.toLocaleString("pt-BR")
 const dec=(n:number)=>n.toFixed(1).replace(".",",")
 const axis={axisLine:{lineStyle:{color:"#3a4049"}},axisLabel:{color:"#aeb4bd",fontSize:10},splitLine:{lineStyle:{color:"#2b3037"}}}
-const fallbackPeriods=[{key:"all",label:"Jan-Jul/2026",months:["Jan","Fev","Mar","Abr","Mai","Jun","Jul"]}]
+const fallbackPeriods=[{key:"all",label:"Jan-Jul/2026",months:["Jan","Fev","Mar","Abr","Mai","Jun","Jul"]},{key:"jan",label:"Jan/2026",months:["Jan"]},{key:"fev",label:"Fev/2026",months:["Fev"]},{key:"mar",label:"Mar/2026",months:["Mar"]},{key:"abr",label:"Abr/2026",months:["Abr"]},{key:"mai",label:"Mai/2026",months:["Mai"]},{key:"jun",label:"Jun/2026",months:["Jun"]},{key:"jul",label:"Jul/2026",months:["Jul"]}]
 const filterLabels:Record<string,string>={period:"Período",type:"Tipo",municipality:"Município",unit:"Unidade",subtype:"Subtipo",shift:"Turno"}
+
+
+function periodKeyForMonth(month:string, periods?:PeriodOption[] | null){
+ return (periods || fallbackPeriods).find(option=>option.months.length===1 && option.months[0]===month)?.key || ""
+}
 
 type DashboardProps={globalFilters:GlobalFilters;setGlobalFilters:SetGlobalFilters;clearGlobalFilters:()=>void}
 type Snapshot={loading:boolean;error:string;filters:AvailableFilters|null;overview:OverviewType|null;sla:Sla|null;monthly:MonthlyItem[];comparison:MonthlyComparison[];types:ApiList<NamedMetric>|null;cities:ApiList<NamedMetric>|null;hours:ApiList<number>|null;units:ApiList<NamedMetric>|null;shifts:ApiList<NamedMetric>|null}
@@ -69,10 +74,13 @@ export function EvolutionPage({globalFilters,setGlobalFilters}:DashboardProps){
  const params=useGlobalParams(globalFilters)
  const state=useSnapshot(params)
  const hasComparison=state.comparison.length>0 && !globalFilters.type
- const series:any[]=[{name:"2026",type:"line",smooth:true,symbolSize:7,data:state.monthly.map(item=>item.total),lineStyle:{width:3,color:"#d83135"},itemStyle:{color:"#ffcc29"}}]
+ const monthEvents={click:(p:any)=>{ const key=periodKeyForMonth(String(p?.name || ""),state.filters?.periods); if(key) setGlobalFilters({period:key}) }}
+ const selectedMonths=new Set(((state.filters?.periods || fallbackPeriods).find(option=>option.key===globalFilters.period)?.months || []))
+ const highlightPeriod=globalFilters.period!=="all"
+ const series:any[]=[{name:"2026",type:"line",smooth:true,symbolSize:(_:unknown,p:any)=>highlightPeriod&&selectedMonths.has(state.monthly[p.dataIndex]?.mes)?10:7,data:state.monthly.map(item=>item.total),lineStyle:{width:3,color:"#d83135"},itemStyle:{color:"#ffcc29"}}]
  if(hasComparison) series.unshift({name:"2025",type:"line",smooth:true,symbolSize:5,data:state.comparison.map(item=>item.v2025),lineStyle:{width:2,color:"#58a6ff",type:"dashed"},itemStyle:{color:"#58a6ff"}})
  const option={tooltip:{trigger:"axis"},legend:{show:hasComparison,textStyle:{color:"#aeb4bd"}},grid:{left:42,right:18,top:hasComparison?34:18,bottom:34},xAxis:{type:"category",data:state.monthly.map(item=>item.mes),...axis},yAxis:{type:"value",...axis},series}
- return <><PageHead area="ANÁLISE / EVOLUÇÃO" title="Evolução" caption="Volume mensal e comparação histórica." badge="Série temporal"/><FilterBar filters={state.filters} globalFilters={globalFilters} setGlobalFilters={setGlobalFilters}/><Warning items={state.overview?.unavailable_filters}/><LoadState state={state}><div className="kpiGrid compact"><KpiCard label="Total" value={fmt(state.overview?.total || 0)} meta="período selecionado" tone="red"/><KpiCard label="Média diária" value={dec(state.overview?.average_per_day || 0)} meta="dias reais do período"/><KpiCard label="Variação" value={state.overview?.delta_pct==null?"sem base":`${state.overview.delta_pct>0?"+":""}${dec(state.overview.delta_pct)}%`} meta="base 2025" tone="gold"/></div><Panel title="Evolução mensal" sub={hasComparison?"Comparativo 2025 x 2026":"Série filtrada pela API"}><ReactECharts option={option} style={{height:390}}/></Panel></LoadState></>
+ return <><PageHead area="ANÁLISE / EVOLUÇÃO" title="Evolução" caption="Volume mensal e comparação histórica." badge="Série temporal"/><FilterBar filters={state.filters} globalFilters={globalFilters} setGlobalFilters={setGlobalFilters}/><Warning items={state.overview?.unavailable_filters}/><LoadState state={state}><div className="kpiGrid compact"><KpiCard label="Total" value={fmt(state.overview?.total || 0)} meta="período selecionado" tone="red"/><KpiCard label="Média diária" value={dec(state.overview?.average_per_day || 0)} meta="dias reais do período"/><KpiCard label="Variação" value={state.overview?.delta_pct==null?"sem base":`${state.overview.delta_pct>0?"+":""}${dec(state.overview.delta_pct)}%`} meta="base 2025" tone="gold"/></div><Panel title="Evolução mensal" sub={hasComparison?"Comparativo 2025 x 2026":"Série filtrada pela API"}><ReactECharts option={option} onEvents={monthEvents} style={{height:390}}/></Panel></LoadState></>
 }
 
 export function TypificationPage({globalFilters,setGlobalFilters}:DashboardProps){

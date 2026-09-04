@@ -67,6 +67,19 @@ def test_analytics_period_filter_recalculates_overview():
         assert data["coverage"]["months"] == ["Jan", "Fev", "Mar"]
 
 
+def test_analytics_month_period_filter_recalculates_overview_and_comparison():
+    with TestClient(app) as client:
+        overview = client.get("/api/v1/analytics/overview?period=jul").json()
+        monthly = client.get("/api/v1/analytics/monthly?period=jul").json()
+        assert overview["total"] == 7006
+        assert overview["average_per_day"] == 226.0
+        assert overview["delta_pct"] == 5.4
+        assert overview["applied_filters"]["period"] == "Jul/2026"
+        assert overview["coverage"]["months"] == ["Jul"]
+        assert [item["mes"] for item in monthly["items"]] == ["Jul"]
+        assert [item["mes"] for item in monthly["comparison"]] == ["Jul"]
+
+
 def test_analytics_type_filter_recalculates_monthly_series():
     with TestClient(app) as client:
         data = client.get("/api/v1/analytics/monthly?period=q1&type=Inc%C3%AAndio").json()
@@ -89,7 +102,10 @@ def test_analytics_declares_unavailable_cross_filters():
 def test_analytics_filters_endpoint_lists_available_values():
     with TestClient(app) as client:
         data = client.get("/api/v1/analytics/filters").json()
-        assert data["periods"][0]["key"] == "all"
+        period_keys = [period["key"] for period in data["periods"]]
+        assert period_keys[0] == "all"
+        assert "jan" in period_keys
+        assert "jul" in period_keys
         assert "Emergência Clínica" in data["types"]
         assert "Campo Grande" in data["municipalities"]
         assert data["subtypes"] == []

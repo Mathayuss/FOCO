@@ -53,7 +53,10 @@ main{margin-left:236px;min-width:0}
 .topbar{height:72px;position:sticky;top:0;z-index:10;background:rgba(18,19,22,.94);backdrop-filter:blur(12px);border-bottom:1px solid var(--foco-border);display:flex;align-items:center;padding:0 24px;gap:12px}
 .filterSummary{width:300px;height:38px;border:1px solid var(--foco-border);border-radius:8px;background:#15171b;color:var(--foco-text-muted);padding:0 12px;display:flex;align-items:center;justify-content:space-between;gap:12px}.filterSummary b{font-size:8px;color:var(--foco-jalde);font-weight:900;text-transform:uppercase;letter-spacing:.8px}.filterSummary span{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
 .topFilterChips{display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;flex:1}
-.topFilterChips i{font-style:normal;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid rgba(88,166,255,.26);background:rgba(88,166,255,.08);color:#b7d6ff;border-radius:999px;padding:6px 8px;font-size:8px;font-weight:700;text-transform:uppercase}
+.topFilterChips i,.topFilterChips .filterChip{font-style:normal;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid rgba(88,166,255,.26);background:rgba(88,166,255,.08);color:#b7d6ff;border-radius:999px;padding:6px 8px;font-size:8px;font-weight:700;text-transform:uppercase}
+.topFilterChips .filterChip{height:28px;display:inline-flex;align-items:center;gap:6px;min-width:0;flex:0 1 auto}
+.topFilterChips .filterChip.limited{border-color:rgba(255,204,41,.32);background:rgba(255,204,41,.08);color:#ffe59b}
+.topFilterChips .filterChip span,.activeFilters button span{display:inline-grid;place-items:center;width:13px;height:13px;border-radius:50%;background:rgba(255,255,255,.12);font-size:8px;line-height:1;flex:0 0 auto}
 .topActions{margin-left:auto;display:flex;gap:8px;align-items:center;flex-shrink:0}
 .topActions>button{width:34px;height:34px;border-radius:8px;border:1px solid var(--foco-border);background:#17191d;color:var(--foco-text-muted)}
 .topActions>button:hover:not(:disabled){border-color:var(--foco-goles);color:#fff}
@@ -81,7 +84,7 @@ main{margin-left:236px;min-width:0}
 .filters select.filterLimited{border-color:rgba(255,204,41,.5);color:#ffe59b;background:#191714}
 .filters button.clearFilters{border-color:rgba(216,49,53,.5);color:#ffc4c6;background:rgba(216,49,53,.08)}
 .filters button:hover{border-color:var(--foco-goles);color:#fff}.filters select:disabled{opacity:.48;cursor:not-allowed}.pageFilterRow select{max-width:220px}
-.activeFilters{display:flex;gap:7px;flex-wrap:wrap;margin:-2px 0 10px}.activeFilters i{font-style:normal;border:1px solid rgba(88,166,255,.26);background:rgba(88,166,255,.08);color:#b7d6ff;border-radius:999px;padding:6px 9px;font-size:8px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}.activeFilters i.limited{border-color:rgba(255,204,41,.32);background:rgba(255,204,41,.08);color:#ffe59b}
+.activeFilters{display:flex;gap:7px;flex-wrap:wrap;margin:-2px 0 10px}.activeFilters i,.activeFilters button{font-style:normal;border:1px solid rgba(88,166,255,.26);background:rgba(88,166,255,.08);color:#b7d6ff;border-radius:999px;padding:6px 9px;font-size:8px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}.activeFilters button{display:inline-flex;align-items:center;gap:6px;min-height:27px}.activeFilters i.limited,.activeFilters button.limited{border-color:rgba(255,204,41,.32);background:rgba(255,204,41,.08);color:#ffe59b}
 
 .scopeNote,.coveragePanel,.filterWarning{display:flex;align-items:center;gap:10px;border:1px solid var(--foco-border);background:#14161a;border-radius:8px;padding:9px 11px;margin-bottom:12px}
 .scopeNote{font-size:9px;color:var(--foco-text-muted);line-height:1.5}.scopeNote b:first-child{color:#b7d6ff}.scopeNote b:last-child{color:var(--foco-jalde)}

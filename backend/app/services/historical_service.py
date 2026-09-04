@@ -5,8 +5,18 @@ from typing import Any
 
 DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "historical_metrics.json"
 DAYS_BY_MONTH = {"Jan": 31, "Fev": 28, "Mar": 31, "Abr": 30, "Mai": 31, "Jun": 30, "Jul": 31}
+MONTH_PERIODS = {
+    "jan": {"label": "Jan/2026", "months": ["Jan"]},
+    "fev": {"label": "Fev/2026", "months": ["Fev"]},
+    "mar": {"label": "Mar/2026", "months": ["Mar"]},
+    "abr": {"label": "Abr/2026", "months": ["Abr"]},
+    "mai": {"label": "Mai/2026", "months": ["Mai"]},
+    "jun": {"label": "Jun/2026", "months": ["Jun"]},
+    "jul": {"label": "Jul/2026", "months": ["Jul"]},
+}
 PERIODS = {
     "all": {"label": "Jan-Jul/2026", "months": ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul"]},
+    **MONTH_PERIODS,
     "q1": {"label": "Jan-Mar/2026", "months": ["Jan", "Fev", "Mar"]},
     "q2": {"label": "Abr-Jun/2026", "months": ["Abr", "Mai", "Jun"]},
     "last3": {"label": "Mai-Jul/2026", "months": ["Mai", "Jun", "Jul"]},
