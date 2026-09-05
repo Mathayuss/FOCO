@@ -8,3 +8,5 @@ node_modules/
 dist/
 .vite/
 *.tsbuildinfo
+*.db.backup-*
+documentacao/arq_ref/
