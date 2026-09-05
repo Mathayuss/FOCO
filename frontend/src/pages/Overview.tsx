@@ -47,6 +47,9 @@ export default function Overview({globalFilters,setGlobalFilters,clearGlobalFilt
  const hasRequestedLimited=unavailable.length>0
  const hasFilter=activeFilterCount(globalFilters)>0
  const hasComparison=comparison.length>0 && !typeFilter
+ const comparisonSummary=ov?.comparison
+ const hasComparisonSummary=Boolean(comparisonSummary?.available)
+ const comparisonDeltaTone=(comparisonSummary?.delta_abs || 0) >= 0 ? "up" : "down"
  const limited=ov?.coverage?.limited_dimensions || []
  const partialTypeSeries=Boolean(ov?.coverage?.partial_type_series)
  const missingTypeMonths=ov?.coverage?.missing_type_months || []
@@ -68,10 +71,11 @@ export default function Overview({globalFilters,setGlobalFilters,clearGlobalFilt
   <div className="activeFilters">{!activeEntries.some(entry=>entry.key==="period")&&<i>Período: {currentPeriod}</i>}{activeEntries.map(entry=><button key={entry.key} className={entry.limited?"limited":""} title={`Remover filtro ${entry.label}`} aria-label={`Remover filtro ${entry.label}: ${entry.value}`} onClick={()=>removeFilter(entry.key)}>{entry.label}: {entry.value}<span aria-hidden="true">x</span></button>)}<i>Fonte: histórico consolidado</i>{hasComparison&&<i>Comparativo: 2025 x 2026</i>}{limited.length>0&&<i className="limited">Limitados: {limited.join(", ")}</i>}</div>
   {hasRequestedLimited&&<div className="filterWarning"><b>Filtros não aplicados</b><span>{unavailable.map(item=>`${filterLabels[item.field] || item.field}: ${item.value}`).join(" · ")}</span></div>}
   <div className="scopeNote"><b>Histórico consolidado</b> alimenta volume, evolução e tipificação filtráveis por período/tipo. <b>Território, hora e unidade</b> aguardam agregações cruzadas para refletir todos os filtros.</div>
+  {comparisonSummary&&<div className="comparisonStrip"><div><span>Recorte atual</span><b>{comparisonSummary.current_label}</b><strong>{fmt(comparisonSummary.current_total ?? ov?.total ?? 0)}</strong></div><div><span>Base comparada</span><b>{comparisonSummary.baseline_label || "sem base"}</b><strong>{comparisonSummary.baseline_total==null?"-":fmt(comparisonSummary.baseline_total)}</strong></div><div className={hasComparisonSummary?comparisonDeltaTone:"muted"}><span>Diferença</span><b>{comparisonSummary.delta_abs==null?"sem base":`${comparisonSummary.delta_abs>0?"+":""}${fmt(comparisonSummary.delta_abs)}`}</b><strong>{comparisonSummary.delta_pct==null?"-":`${comparisonSummary.delta_pct>0?"+":""}${dec(comparisonSummary.delta_pct)}%`}</strong></div>{!comparisonSummary.available&&<div className="reason"><span>Comparação</span><b>{comparisonSummary.reason || "sem base detalhada"}</b><strong>-</strong></div>}</div>}
   <div className="kpiGrid">
    <KpiCard label="Ocorrências" value={loading?"-":`${partialTypeSeries?">= ":""}${fmt(ov?.total||0)}`} meta={partialTypeSeries?"mínimo conhecido; série mensal parcial":typeFilter?"total do tipo no período":"total do período selecionado"} tone="red"/>
    <KpiCard label="Média diária" value={loading?"-":dec(ov?.average_per_day||0)} meta={partialTypeSeries?"calculada sobre mínimo conhecido":"calculada pela API com dias reais"}/>
-   <KpiCard label="Variação" value={ov?.delta_pct==null?"sem base":`${ov.delta_pct>0?"+":""}${dec(ov.delta_pct)}%`} meta={hasComparison?"comparação com 2025 no período":"comparação indisponível para este recorte"} tone="gold"/>
+   <KpiCard label="Variação" value={ov?.delta_pct==null?"sem base":`${ov.delta_pct>0?"+":""}${dec(ov.delta_pct)}%`} meta={comparisonSummary?.baseline_label?`base ${comparisonSummary.baseline_label}`:comparisonSummary?.reason || "comparação indisponível"} tone="gold"/>
    <KpiCard label="SLA demonstrativo" value={sla?`${dec(sla.compliance_pct)}%`:"-"} meta={sla?`${sla.computable}/${sla.sample_size} registros calculáveis`:"carregando"} tone="green"/>
    <KpiCard label="Maior demanda" value={ov?.top_type||"-"} meta={ov?.top_municipality||"carregando"} tone="neutral"/>
   </div>

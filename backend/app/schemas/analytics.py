@@ -6,10 +6,22 @@ class FilterIssue(BaseModel):
     value: str
     reason: str
 
+class ComparisonSummary(BaseModel):
+    available: bool
+    current_label: str
+    baseline_label: str | None = None
+    current_total: int | None = None
+    baseline_total: int | None = None
+    delta_abs: int | None = None
+    delta_pct: float | None = None
+    reason: str | None = None
+    source_scope: str
+
 class OverviewResponse(BaseModel):
     total: int
     average_per_day: float
     delta_pct: float | None = None
+    comparison: ComparisonSummary
     top_type: str
     top_municipality: str
     source_scope: str

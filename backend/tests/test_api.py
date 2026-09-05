@@ -80,6 +80,34 @@ def test_analytics_month_period_filter_recalculates_overview_and_comparison():
         assert [item["mes"] for item in monthly["comparison"]] == ["Jul"]
 
 
+def test_overview_exposes_comparison_summary_for_period():
+    with TestClient(app) as client:
+        data = client.get("/api/v1/analytics/overview?period=q1").json()
+        comparison = data["comparison"]
+        assert comparison["available"] is True
+        assert comparison["current_label"] == "Jan-Mar/2026"
+        assert comparison["baseline_label"] == "Jan-Mar/2025"
+        assert comparison["current_total"] == 20723
+        assert comparison["baseline_total"] == 19254
+        assert comparison["delta_abs"] == 1469
+        assert comparison["delta_pct"] == 7.6
+
+
+def test_overview_exposes_type_comparison_only_when_available():
+    with TestClient(app) as client:
+        consolidated = client.get("/api/v1/analytics/overview?type=Emerg%C3%AAncia%20Cl%C3%ADnica").json()
+        limited = client.get("/api/v1/analytics/overview?period=q1&type=Emerg%C3%AAncia%20Cl%C3%ADnica").json()
+        assert consolidated["comparison"]["available"] is True
+        assert consolidated["comparison"]["current_total"] == 9367
+        assert consolidated["comparison"]["baseline_total"] == 8679
+        assert consolidated["comparison"]["delta_abs"] == 688
+        assert consolidated["comparison"]["delta_pct"] == 7.9
+        assert limited["comparison"]["available"] is False
+        assert limited["comparison"]["delta_pct"] is None
+        assert limited["delta_pct"] is None
+        assert "somente no consolidado" in limited["comparison"]["reason"]
+
+
 def test_analytics_type_filter_recalculates_monthly_series():
     with TestClient(app) as client:
         data = client.get("/api/v1/analytics/monthly?period=q1&type=Inc%C3%AAndio").json()

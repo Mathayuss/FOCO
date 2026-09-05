@@ -99,17 +99,63 @@ def _sum_types(data: dict, months: list[dict], period: str | None) -> list[dict]
         reverse=True,
     )
 
-def _delta_pct(data: dict, months: list[dict], period: str | None, type_name: str | None) -> float | None:
-    key = period or "all"
+def _comparison_summary(data: dict, months: list[dict], period: str | None, type_name: str | None) -> dict[str, Any]:
+    selected_period = _period(period)
+    current_label = selected_period["label"]
+    baseline_label = current_label.replace("2026", "2025")
     if type_name:
-        if key != "all":
-            return None
+        if (period or "all") != "all":
+            return {
+                "available": False,
+                "current_label": current_label,
+                "baseline_label": None,
+                "current_total": None,
+                "baseline_total": None,
+                "delta_abs": None,
+                "delta_pct": None,
+                "reason": "Comparativo por tipificação está disponível somente no consolidado Jan-Jul.",
+                "source_scope": "historical_consolidated",
+            }
         item = next((row for row in data["comparativo"].get("tip", []) if row["nome"] == type_name), None)
-        return float(item["delta"]) if item else None
-    current = sum(month["total"] for month in months)
+        if not item:
+            return {
+                "available": False,
+                "current_label": current_label,
+                "baseline_label": None,
+                "current_total": None,
+                "baseline_total": None,
+                "delta_abs": None,
+                "delta_pct": None,
+                "reason": "Tipificação sem comparativo histórico consolidado disponível.",
+                "source_scope": "historical_consolidated",
+            }
+        current = int(item["v2026"])
+        baseline = int(item["v2025"])
+        return {
+            "available": True,
+            "current_label": current_label,
+            "baseline_label": baseline_label,
+            "current_total": current,
+            "baseline_total": baseline,
+            "delta_abs": current - baseline,
+            "delta_pct": float(item["delta"]),
+            "reason": None,
+            "source_scope": "historical_consolidated",
+        }
     selected = {month["mes"] for month in months}
-    previous = sum(row["v2025"] for row in data["comparativo"]["mensal"] if row["mes"] in selected)
-    return round(((current - previous) / previous * 100), 1) if previous else None
+    current = sum(int(month["total"]) for month in months)
+    baseline = sum(int(row["v2025"]) for row in data["comparativo"]["mensal"] if row["mes"] in selected)
+    return {
+        "available": bool(baseline),
+        "current_label": current_label,
+        "baseline_label": baseline_label if baseline else None,
+        "current_total": current,
+        "baseline_total": baseline if baseline else None,
+        "delta_abs": current - baseline if baseline else None,
+        "delta_pct": round(((current - baseline) / baseline * 100), 1) if baseline else None,
+        "reason": None if baseline else "Comparativo histórico indisponível para o período selecionado.",
+        "source_scope": "historical_consolidated",
+    }
 
 def _type_series_quality(months: list[dict], type_name: str | None) -> dict[str, Any]:
     if not type_name:
@@ -179,10 +225,12 @@ def overview(period: str | None = None, type_name: str | None = None, **filters:
     else:
         total = sum(value for month in months if (value := _month_type_total(month, type_name)) is not None)
     types = _sum_types(data, months, period)
+    comparison = _comparison_summary(data, months, period, type_name)
     return {
         "total": total,
         "average_per_day": round((total / days) if days else 0, 1),
-        "delta_pct": _delta_pct(data, months, period, type_name),
+        "delta_pct": comparison["delta_pct"] if comparison["available"] else None,
+        "comparison": comparison,
         "top_type": type_name or (types[0]["nome"] if types else ""),
         "top_municipality": data["mun"][0]["nome"] if data.get("mun") else "",
         "source_scope": "historical_consolidated",
