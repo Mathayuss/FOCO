@@ -5,7 +5,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from app.schemas.imports import CsvPreviewResponse
 from app.services.import_service import preview_csv
 
-router = APIRouter(prefix="/imports", tags=["imports"])
+router = APIRouter(prefix="/imports", tags=["importações"])
 
 MAX_CSV_MEGABYTES = 512
 MAX_CSV_BYTES = MAX_CSV_MEGABYTES * 1024 * 1024

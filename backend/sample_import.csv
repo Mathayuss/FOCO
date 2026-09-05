@@ -1,2 +1,2 @@
-source_id,opened_at,municipality,type_name,subtype_name,latitude,longitude,vehicle_code,vehicle_type,dispatched_at,departure_at,arrival_at,released_at,returned_at,available_at
+id_origem,abertura_em,municipio,tipo,subtipo,latitude,longitude,codigo_viatura,tipo_viatura,despacho_em,saida_em,chegada_em,liberacao_em,retorno_em,disponibilidade_em
 EX-001,2026-09-01T12:00:00-04:00,Campo Grande,Emergência Clínica,,-20.4697,-54.6201,UR-001,UR,2026-09-01T12:02:00-04:00,2026-09-01T12:04:00-04:00,2026-09-01T12:12:00-04:00,2026-09-01T12:42:00-04:00,2026-09-01T12:51:00-04:00,2026-09-01T12:55:00-04:00

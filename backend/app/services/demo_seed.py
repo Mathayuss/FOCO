@@ -21,7 +21,7 @@ COORDS = {
 }
 
 def seed_demo(db: Session):
-    if db.scalar(select(Occurrence.id).where(Occurrence.source == "DEMO").limit(1)):
+    if db.scalar(select(Occurrence.id).where(Occurrence.source == "DADO_DEMO").limit(1)):
         return
 
     units = {}
@@ -51,12 +51,12 @@ def seed_demo(db: Session):
         lat, lon = COORDS[city]
         unit = list(units.values())[i % len(units)]
         occ = Occurrence(
-            source="DEMO", source_id=f"DEMO-{i+1:05d}", external_number=f"2026-D-{i+1:05d}",
+            source="DADO_DEMO", source_id=f"DADO_DEMO-{i+1:05d}", external_number=f"2026-D-{i+1:05d}",
             opened_at=opened, dispatched_at=dispatch, departure_at=departure, arrival_at=arrival,
             released_at=released, returned_at=returned, available_at=available,
             type_name=TYPES[i % len(TYPES)], subtype_name=None,
             municipality=city, latitude=lat+rng.uniform(-.05,.05), longitude=lon+rng.uniform(-.05,.05),
-            unit_id=unit.id, status="closed", quality_score=1.0,
+            unit_id=unit.id, status="fechada", quality_score=1.0,
         )
         db.add(occ); db.flush()
         chosen = [vehicles[i % len(vehicles)]]

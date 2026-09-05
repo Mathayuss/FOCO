@@ -1,6 +1,11 @@
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from app.main import app
 from app.api.endpoints import imports as imports_endpoint
+from app.db.session import SessionLocal
+from app.models.occurrence import Occurrence, OccurrenceVehicle
+from app.models.unit import Unit
+from app.models.vehicle import Vehicle
 
 
 def test_health():
@@ -33,6 +38,64 @@ def test_product_identity():
         assert health["service"] == "foco-api"
 
 
+def test_database_model_names_are_portuguese():
+    assert Unit.__tablename__ == "unidade_operacional"
+    assert Vehicle.__tablename__ == "viatura"
+    assert Occurrence.__tablename__ == "ocorrencia"
+    assert OccurrenceVehicle.__tablename__ == "ocorrencia_viatura"
+
+    assert set(Unit.__table__.columns.keys()) == {"id_unidade_operacional", "nome", "comando", "ativo"}
+    assert set(Vehicle.__table__.columns.keys()) == {"id_viatura", "codigo", "tipo_viatura", "id_unidade_operacional", "ativo"}
+    assert set(OccurrenceVehicle.__table__.columns.keys()) == {
+        "id_ocorrencia_viatura",
+        "id_ocorrencia",
+        "id_viatura",
+        "despacho_em",
+        "saida_em",
+        "chegada_em",
+        "liberacao_em",
+        "retorno_em",
+        "disponibilidade_em",
+    }
+    assert set(Occurrence.__table__.columns.keys()) == {
+        "id_ocorrencia",
+        "sistema_origem",
+        "id_origem",
+        "numero_externo",
+        "abertura_em",
+        "despacho_em",
+        "saida_em",
+        "chegada_em",
+        "liberacao_em",
+        "retorno_em",
+        "disponibilidade_em",
+        "grupo",
+        "tipo",
+        "subtipo",
+        "prioridade",
+        "municipio",
+        "bairro",
+        "endereco",
+        "latitude",
+        "longitude",
+        "id_unidade_operacional",
+        "situacao",
+        "pontuacao_qualidade",
+        "importado_em",
+    }
+
+
+def test_demo_rows_use_portuguese_database_values():
+    with TestClient(app):
+        db = SessionLocal()
+        try:
+            row = db.scalar(select(Occurrence).where(Occurrence.source == "DADO_DEMO").limit(1))
+            assert row is not None
+            assert row.status == "fechada"
+        finally:
+            db.close()
+
+
 def test_csv_preview_accepts_sample_file():
     with TestClient(app) as client:
         with open("sample_import.csv", "rb") as sample:
@@ -46,17 +109,34 @@ def test_csv_preview_accepts_sample_file():
         assert data["valid_rows"] == 1
         assert data["invalid_rows"] == 0
         assert data["can_commit"] is True
-        assert "source_id" in data["recognized_headers"]
+        assert "id_origem" in data["recognized_headers"]
 
 
 def test_csv_preview_rejects_non_csv_extension():
     with TestClient(app) as client:
         r = client.post(
             "/api/v1/imports/csv/preview",
-            files={"file": ("sample.txt", b"source_id\nEX-001\n", "text/plain")},
+            files={"file": ("sample.txt", b"id_origem\nEX-001\n", "text/plain")},
         )
         assert r.status_code == 400
         assert r.json()["detail"] == "Envie um arquivo CSV"
+
+
+def test_csv_preview_accepts_legacy_english_headers_as_aliases():
+    content = (
+        "source_id,opened_at,municipality,type_name\n"
+        "EX-001,2026-09-01T12:00:00-04:00,Campo Grande,Incêndio\n"
+    ).encode("utf-8")
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/v1/imports/csv/preview",
+            files={"file": ("legado.csv", content, "text/csv")},
+        )
+    data = r.json()
+    assert r.status_code == 200
+    assert data["recognized_headers"] == ["abertura_em", "id_origem", "municipio", "tipo"]
+    assert data["missing_required_headers"] == []
+    assert data["can_commit"] is True
 
 
 def test_analytics_period_filter_recalculates_overview():
@@ -198,7 +278,7 @@ def test_csv_preview_rejects_invalid_mime_type():
     with TestClient(app) as client:
         r = client.post(
             "/api/v1/imports/csv/preview",
-            files={"file": ("sample.csv", b"source_id,opened_at,municipality,type_name\n", "application/json")},
+            files={"file": ("sample.csv", b"id_origem,abertura_em,municipio,tipo\n", "application/json")},
         )
         assert r.status_code == 400
         assert r.json()["detail"] == "Tipo MIME inválido para CSV"
@@ -208,7 +288,7 @@ def test_csv_preview_rejects_path_like_filename():
     with TestClient(app) as client:
         r = client.post(
             "/api/v1/imports/csv/preview",
-            files={"file": ("../sample.csv", b"source_id,opened_at,municipality,type_name\n", "text/csv")},
+            files={"file": ("../sample.csv", b"id_origem,abertura_em,municipio,tipo\n", "text/csv")},
         )
         assert r.status_code == 400
         assert r.json()["detail"] == "Nome de arquivo inválido"
@@ -233,7 +313,7 @@ def test_csv_preview_rejects_large_file(monkeypatch):
     monkeypatch.setattr(imports_endpoint, "MAX_CSV_MEGABYTES", 1)
     monkeypatch.setattr(imports_endpoint, "MAX_CSV_BYTES", 64)
     with TestClient(app) as client:
-        content = b"source_id,opened_at,municipality,type_name\n" + b"A" * 65
+        content = b"id_origem,abertura_em,municipio,tipo\n" + b"A" * 65
         r = client.post(
             "/api/v1/imports/csv/preview",
             files={"file": ("large.csv", content, "text/csv")},

@@ -5,7 +5,7 @@ from app.schemas.analytics import OverviewResponse, SlaResponse
 from app.services import historical_service
 from app.services.sla_service import calculate
 
-router = APIRouter(prefix="/analytics", tags=["analytics"])
+router = APIRouter(prefix="/analytics", tags=["análises"])
 
 def filters(
     period: str | None = Query(default="all"),

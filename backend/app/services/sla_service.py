@@ -21,7 +21,7 @@ def percentile(values: list[float], p: float) -> float:
     return values[lo] * (1 - frac) + values[hi] * frac
 
 def calculate(db: Session) -> dict:
-    rows = db.scalars(select(Occurrence).where(Occurrence.source == "DEMO")).all()
+    rows = db.scalars(select(Occurrence).where(Occurrence.source == "DADO_DEMO")).all()
     response = [m for o in rows if (m := _minutes(o.opened_at, o.arrival_at)) is not None]
     compliant = sum(1 for x in response if x <= TARGET_MINUTES)
     return {

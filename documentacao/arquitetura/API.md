@@ -72,6 +72,9 @@ GET /api/v1/imports/{id}
 ```
 
 O preview CSV aceita arquivos de até 512 MB, com validação de extensão, MIME, nome de arquivo e conteúdo UTF-8.
+Cabeçalhos canônicos obrigatórios: `id_origem`, `abertura_em`, `municipio` e `tipo`.
+Cabeçalhos opcionais reconhecidos: `subtipo`, `latitude`, `longitude`, `codigo_viatura`, `tipo_viatura`, `despacho_em`, `saida_em`, `chegada_em`, `liberacao_em`, `retorno_em` e `disponibilidade_em`.
+Aliases antigos em inglês são aceitos somente como compatibilidade de importação; o padrão FOCO permanece em português.
 
 ## 7. Integrações
 ```http

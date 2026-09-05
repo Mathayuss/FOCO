@@ -34,7 +34,7 @@ export default function Imports(){
      <input type="file" accept=".csv,text/csv" onChange={e=>handleFile(e.target.files?.[0]||null)}/>
      <span className="dropIcon">CSV</span>
      <b>{file?.name || "Selecionar CSV de ocorrências"}</b>
-     <small>{file ? `${(file.size/1024).toFixed(1).replace(".",",")} KB` : `source_id, opened_at, municipality e type_name são obrigatórios · limite ${MAX_CSV_UPLOAD_MB} MB`}</small>
+     <small>{file ? `${(file.size/1024).toFixed(1).replace(".",",")} KB` : `id_origem, abertura_em, municipio e tipo são obrigatórios · limite ${MAX_CSV_UPLOAD_MB} MB`}</small>
     </label>
     {error && <div className="errorBox">{error}</div>}
     <div className="importNote"><b>Escopo atual</b><span>Preview, reconhecimento de colunas, regras mínimas e duplicidade no arquivo.</span></div>
