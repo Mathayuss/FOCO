@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 from app.main import app
+from app.api.endpoints import imports as imports_endpoint
 
 
 def test_health():
@@ -223,12 +224,19 @@ def test_csv_preview_rejects_empty_file():
         assert r.json()["detail"] == "CSV vazio"
 
 
-def test_csv_preview_rejects_large_file():
+def test_csv_upload_limit_is_512_mb():
+    assert imports_endpoint.MAX_CSV_MEGABYTES == 512
+    assert imports_endpoint.MAX_CSV_BYTES == 512 * 1024 * 1024
+
+
+def test_csv_preview_rejects_large_file(monkeypatch):
+    monkeypatch.setattr(imports_endpoint, "MAX_CSV_MEGABYTES", 1)
+    monkeypatch.setattr(imports_endpoint, "MAX_CSV_BYTES", 64)
     with TestClient(app) as client:
-        content = b"source_id,opened_at,municipality,type_name\n" + b"A" * (5 * 1024 * 1024)
+        content = b"source_id,opened_at,municipality,type_name\n" + b"A" * 65
         r = client.post(
             "/api/v1/imports/csv/preview",
             files={"file": ("large.csv", content, "text/csv")},
         )
         assert r.status_code == 413
-        assert r.json()["detail"] == "CSV excede o limite de 5 MB"
+        assert r.json()["detail"] == "CSV excede o limite de 1 MB"

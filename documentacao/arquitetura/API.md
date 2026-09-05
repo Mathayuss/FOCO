@@ -71,6 +71,8 @@ POST /api/v1/imports
 GET /api/v1/imports/{id}
 ```
 
+O preview CSV aceita arquivos de até 512 MB, com validação de extensão, MIME, nome de arquivo e conteúdo UTF-8.
+
 ## 7. Integrações
 ```http
 GET /api/v1/integrations

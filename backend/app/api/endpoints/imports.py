@@ -7,7 +7,8 @@ from app.services.import_service import preview_csv
 
 router = APIRouter(prefix="/imports", tags=["imports"])
 
-MAX_CSV_BYTES = 5 * 1024 * 1024
+MAX_CSV_MEGABYTES = 512
+MAX_CSV_BYTES = MAX_CSV_MEGABYTES * 1024 * 1024
 ALLOWED_CSV_MIME_TYPES = {"text/csv", "application/csv", "application/vnd.ms-excel"}
 
 def _validate_upload_metadata(file: UploadFile) -> None:
@@ -25,7 +26,7 @@ async def csv_preview(file: UploadFile = File(...)):
     _validate_upload_metadata(file)
     content = await file.read(MAX_CSV_BYTES + 1)
     if len(content) > MAX_CSV_BYTES:
-        raise HTTPException(status_code=413, detail="CSV excede o limite de 5 MB")
+        raise HTTPException(status_code=413, detail=f"CSV excede o limite de {MAX_CSV_MEGABYTES} MB")
     if not content.strip():
         raise HTTPException(status_code=400, detail="CSV vazio")
     try:

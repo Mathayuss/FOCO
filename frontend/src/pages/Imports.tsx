@@ -3,6 +3,8 @@ import { api } from "../api"
 import type { CsvPreview } from "../types"
 
 const pct=(part:number,total:number)=>total?`${Math.round(part/total*100)}%`:"0%"
+const MAX_CSV_UPLOAD_MB=512
+const MAX_CSV_UPLOAD_BYTES=MAX_CSV_UPLOAD_MB*1024*1024
 
 export default function Imports(){
  const [file,setFile]=useState<File|null>(null)
@@ -13,6 +15,10 @@ export default function Imports(){
  async function handleFile(next:File|null){
   setFile(next); setPreview(null); setError("")
   if(!next) return
+  if(next.size>MAX_CSV_UPLOAD_BYTES){
+   setError(`CSV excede o limite de ${MAX_CSV_UPLOAD_MB} MB`)
+   return
+  }
   setLoading(true)
   try{ setPreview(await api.previewCsv(next)) }
   catch(e){ setError(e instanceof Error ? e.message : "Falha ao analisar arquivo") }
@@ -28,7 +34,7 @@ export default function Imports(){
      <input type="file" accept=".csv,text/csv" onChange={e=>handleFile(e.target.files?.[0]||null)}/>
      <span className="dropIcon">CSV</span>
      <b>{file?.name || "Selecionar CSV de ocorrências"}</b>
-     <small>{file ? `${(file.size/1024).toFixed(1).replace(".",",")} KB` : "source_id, opened_at, municipality e type_name são obrigatórios"}</small>
+     <small>{file ? `${(file.size/1024).toFixed(1).replace(".",",")} KB` : `source_id, opened_at, municipality e type_name são obrigatórios · limite ${MAX_CSV_UPLOAD_MB} MB`}</small>
     </label>
     {error && <div className="errorBox">{error}</div>}
     <div className="importNote"><b>Escopo atual</b><span>Preview, reconhecimento de colunas, regras mínimas e duplicidade no arquivo.</span></div>
