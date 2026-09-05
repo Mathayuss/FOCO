@@ -5,6 +5,7 @@ from app.api.router import api_router
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import engine, SessionLocal
+from app.db.schema import garantir_colunas_incrementais
 from app.services.demo_seed import seed_demo
 import app.models  # noqa
 
@@ -13,6 +14,7 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    garantir_colunas_incrementais(engine)
     db = SessionLocal()
     try:
         seed_demo(db)

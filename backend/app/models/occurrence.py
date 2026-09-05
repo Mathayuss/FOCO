@@ -34,6 +34,10 @@ class Occurrence(Base):
     unit_id: Mapped[int | None] = mapped_column("id_unidade_operacional", ForeignKey("unidade_operacional.id_unidade_operacional"), nullable=True)
     status: Mapped[str] = mapped_column("situacao", String(40), default="fechada", index=True)
     quality_score: Mapped[float | None] = mapped_column("pontuacao_qualidade", Float, nullable=True)
+    registered_at: Mapped[datetime | None] = mapped_column("registro_em", DateTime(timezone=True), nullable=True)
+    ibge_code: Mapped[str | None] = mapped_column("codigo_ibge", String(20), nullable=True, index=True)
+    judicial_secret: Mapped[bool] = mapped_column("segredo_de_justica", default=False, index=True)
+    source_payload: Mapped[str | None] = mapped_column("dados_origem", Text, nullable=True)
     imported_at: Mapped[datetime] = mapped_column("importado_em", DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     unit = relationship("Unit", back_populates="occurrences")

@@ -66,15 +66,37 @@ Quando uma tipificação não aparece no top mensal, a API retorna `null` naquel
 
 ## 6. Importações
 ```http
+POST /api/v1/imports/preview
 POST /api/v1/imports/csv/preview
 POST /api/v1/imports
 GET /api/v1/imports/{id}
 ```
 
-O preview CSV aceita arquivos de até 512 MB, com validação de extensão, MIME, nome de arquivo e conteúdo UTF-8.
+O preview aceita arquivos CSV ou XLSX de até 512 MB, com validação de extensão, MIME, nome de arquivo e conteúdo UTF-8 quando CSV.
 Cabeçalhos canônicos obrigatórios: `id_origem`, `abertura_em`, `municipio` e `tipo`.
-Cabeçalhos opcionais reconhecidos: `subtipo`, `latitude`, `longitude`, `codigo_viatura`, `tipo_viatura`, `despacho_em`, `saida_em`, `chegada_em`, `liberacao_em`, `retorno_em` e `disponibilidade_em`.
+Cabeçalhos opcionais reconhecidos: `grupo`, `subtipo`, `unidade_operacional`, `bairro`, `endereco`, `registro_em`, `codigo_ibge`, `segredo_de_justica`, `latitude`, `longitude`, `codigo_viatura`, `tipo_viatura`, `despacho_em`, `saida_em`, `chegada_em`, `liberacao_em`, `retorno_em` e `disponibilidade_em`.
+
+Relatórios SEJUSP são aceitos por equivalência automática de cabeçalhos:
+
+| SEJUSP | FOCO |
+|---|---|
+| `Nº/ANO` | `id_origem` |
+| `DATA DO FATO` + `HORA DO FATO` | `abertura_em` |
+| `DATA DO REGISTRO` + `HORA DO REGISTRO` | `registro_em` |
+| `MUNICÍPIO` | `municipio` |
+| `FATO` | `tipo` |
+| `FATO AGRUPADO` | `grupo` |
+| `CATEGORIA` | `subtipo` |
+| `UNIDADE DE ORIGEM` | `unidade_operacional` |
+| `CÓDIGO IBGE` | `codigo_ibge` |
+| `SEGREDO DE JUSTIÇA` | `segredo_de_justica` |
+| `BAIRRO` | `bairro` |
+| `LOGRADOURO` + `REFERÊNCIA` | `endereco` |
+| `LATITUDE` | `latitude` |
+| `LONGITUDE` | `longitude` |
+
 Aliases antigos em inglês são aceitos somente como compatibilidade de importação; o padrão FOCO permanece em português.
+A importação grava `sistema_origem=RELATORIO_SEJUSP`, `situacao=importada` e preserva a linha original em `dados_origem`.
 
 ## 7. Integrações
 ```http

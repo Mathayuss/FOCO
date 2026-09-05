@@ -1,3 +1,8 @@
+from io import BytesIO
+from uuid import uuid4
+from xml.sax.saxutils import escape
+from zipfile import ZIP_DEFLATED, ZipFile
+
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from app.main import app
@@ -6,6 +11,48 @@ from app.db.session import SessionLocal
 from app.models.occurrence import Occurrence, OccurrenceVehicle
 from app.models.unit import Unit
 from app.models.vehicle import Vehicle
+
+
+def _xlsx_bytes(headers: list[str], rows: list[list[str]]) -> bytes:
+    def col_name(index: int) -> str:
+        name = ""
+        while index:
+            index, remainder = divmod(index - 1, 26)
+            name = chr(65 + remainder) + name
+        return name
+
+    all_rows = [headers, *rows]
+    row_xml = []
+    for row_index, row in enumerate(all_rows, start=1):
+        cells = []
+        for col_index, value in enumerate(row, start=1):
+            ref = f"{col_name(col_index)}{row_index}"
+            cells.append(f'<c r="{ref}" t="inlineStr"><is><t>{escape(str(value))}</t></is></c>')
+        row_xml.append(f'<row r="{row_index}">{"".join(cells)}</row>')
+    sheet = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        f'<sheetData>{"".join(row_xml)}</sheetData>'
+        '</worksheet>'
+    )
+    buffer = BytesIO()
+    with ZipFile(buffer, "w", ZIP_DEFLATED) as zf:
+        zf.writestr("[Content_Types].xml", '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>')
+        zf.writestr("xl/workbook.xml", (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+            'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            '<sheets><sheet name="sejusp" sheetId="1" r:id="rId1"/></sheets>'
+            '</workbook>'
+        ))
+        zf.writestr("xl/_rels/workbook.xml.rels", (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+            '</Relationships>'
+        ))
+        zf.writestr("xl/worksheets/sheet1.xml", sheet)
+    return buffer.getvalue()
 
 
 def test_health():
@@ -81,6 +128,10 @@ def test_database_model_names_are_portuguese():
         "id_unidade_operacional",
         "situacao",
         "pontuacao_qualidade",
+        "registro_em",
+        "codigo_ibge",
+        "segredo_de_justica",
+        "dados_origem",
         "importado_em",
     }
 
@@ -119,7 +170,7 @@ def test_csv_preview_rejects_non_csv_extension():
             files={"file": ("sample.txt", b"id_origem\nEX-001\n", "text/plain")},
         )
         assert r.status_code == 400
-        assert r.json()["detail"] == "Envie um arquivo CSV"
+        assert r.json()["detail"] == "Envie um arquivo CSV ou XLSX"
 
 
 def test_csv_preview_accepts_legacy_english_headers_as_aliases():
@@ -137,6 +188,126 @@ def test_csv_preview_accepts_legacy_english_headers_as_aliases():
     assert data["recognized_headers"] == ["abertura_em", "id_origem", "municipio", "tipo"]
     assert data["missing_required_headers"] == []
     assert data["can_commit"] is True
+
+
+def test_import_preview_maps_sejusp_csv_headers_to_foco_fields():
+    content = (
+        "Nº/ANO,DATA DO FATO,HORA DO FATO,FATO,FATO AGRUPADO,CATEGORIA,"
+        "UNIDADE DE ORIGEM,MUNICÍPIO,CÓDIGO IBGE,BAIRRO,LOGRADOURO,REFERÊNCIA,"
+        "LATITUDE,LONGITUDE,SEGREDO DE JUSTIÇA\n"
+        "100/2025 1º GBM,45838,0.5,INCENDIO EM VEGETACAO,COMBATE A INCENDIO,"
+        "COMBATE A INCENDIO,1º GBM,Campo Grande,5002704,Centro,R. A,Referência,"
+        "-20.45,-54.62,Sim\n"
+    ).encode("utf-8")
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/v1/imports/preview",
+            files={"file": ("sejusp.csv", content, "text/csv")},
+        )
+    data = r.json()
+    mappings = {item["source_header"]: item["target_field"] for item in data["column_mappings"]}
+    assert r.status_code == 200
+    assert data["source_profile"] == "RELATORIO_SEJUSP"
+    assert data["source_format"] == "csv"
+    assert data["valid_rows"] == 1
+    assert data["sensitive_rows"] == 1
+    assert data["invalid_coordinate_rows"] == 0
+    assert data["can_commit"] is True
+    assert mappings["Nº/ANO"] == "id_origem"
+    assert mappings["DATA DO FATO"] == "abertura_em"
+    assert mappings["FATO"] == "tipo"
+    assert mappings["UNIDADE DE ORIGEM"] == "unidade_operacional"
+
+
+def test_import_preview_accepts_sejusp_xlsx_report_headers():
+    headers = [
+        "Nº/ANO",
+        "DATA DO FATO",
+        "HORA DO FATO",
+        "FATO",
+        "FATO AGRUPADO",
+        "CATEGORIA",
+        "UNIDADE DE ORIGEM",
+        "MUNICÍPIO",
+        "LATITUDE",
+        "LONGITUDE",
+        "SEGREDO DE JUSTIÇA",
+    ]
+    body = _xlsx_bytes(headers, [[
+        "101/2025 1º GBM",
+        "01/01/2025",
+        "12:30",
+        "REMOCAO AO PS",
+        "BUSCA E SALVAMENTO",
+        "BUSCA E SALVAMENTO",
+        "1º GBM",
+        "Campo Grande",
+        "-20.45",
+        "-54.62",
+        "Não",
+    ]])
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/v1/imports/preview",
+            files={"file": ("sejusp.xlsx", body, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+    data = r.json()
+    assert r.status_code == 200
+    assert data["source_format"] == "xlsx"
+    assert data["source_profile"] == "RELATORIO_SEJUSP"
+    assert data["valid_rows"] == 1
+    assert data["missing_required_headers"] == []
+    assert "abertura_em" in data["recognized_headers"]
+
+
+def test_import_commit_inserts_sejusp_rows_with_equivalent_fields():
+    source_id = f"{uuid4()}/2025 9º GBM"
+    unit_name = f"9º GBM TESTE {uuid4()}"
+    content = (
+        "Nº/ANO,DATA DO REGISTRO,HORA DO REGISTRO,DATA DO FATO,HORA DO FATO,FATO,"
+        "FATO AGRUPADO,CATEGORIA,UNIDADE DE ORIGEM,MUNICÍPIO,CÓDIGO IBGE,BAIRRO,"
+        "LOGRADOURO,REFERÊNCIA,LATITUDE,LONGITUDE,SEGREDO DE JUSTIÇA\n"
+        f"{source_id},01/01/2025,08:10,01/01/2025,08:20,INCENDIO EM VEGETACAO,"
+        f"COMBATE A INCENDIO,COMBATE A INCENDIO,{unit_name},Campo Grande,5002704,"
+        "Centro,R. Teste,Próximo ao marco,-20.45,-54.62,Sim\n"
+    ).encode("utf-8")
+    with TestClient(app) as client:
+        first = client.post(
+            "/api/v1/imports",
+            files={"file": ("sejusp.csv", content, "text/csv")},
+        ).json()
+        second = client.post(
+            "/api/v1/imports",
+            files={"file": ("sejusp.csv", content, "text/csv")},
+        ).json()
+
+    assert first["inserted_rows"] == 1
+    assert first["skipped_duplicate_rows"] == 0
+    assert first["source_scope"] == "RELATORIO_SEJUSP"
+    assert second["inserted_rows"] == 0
+    assert second["skipped_duplicate_rows"] == 1
+
+    db = SessionLocal()
+    try:
+        row = db.scalar(
+            select(Occurrence).where(
+                Occurrence.source == "RELATORIO_SEJUSP",
+                Occurrence.source_id == source_id,
+            )
+        )
+        assert row is not None
+        assert row.type_name == "INCENDIO EM VEGETACAO"
+        assert row.group_name == "COMBATE A INCENDIO"
+        assert row.subtype_name == "COMBATE A INCENDIO"
+        assert row.municipality == "Campo Grande"
+        assert row.ibge_code == "5002704"
+        assert row.status == "importada"
+        assert row.priority == "sigilo_judicial"
+        assert row.judicial_secret is True
+        assert row.source_payload and "Nº/ANO" in row.source_payload
+        assert row.unit and row.unit.name == unit_name
+    finally:
+        db.close()
 
 
 def test_analytics_period_filter_recalculates_overview():
@@ -281,7 +452,7 @@ def test_csv_preview_rejects_invalid_mime_type():
             files={"file": ("sample.csv", b"id_origem,abertura_em,municipio,tipo\n", "application/json")},
         )
         assert r.status_code == 400
-        assert r.json()["detail"] == "Tipo MIME inválido para CSV"
+        assert r.json()["detail"] == "Tipo MIME inválido para importação"
 
 
 def test_csv_preview_rejects_path_like_filename():
@@ -301,17 +472,19 @@ def test_csv_preview_rejects_empty_file():
             files={"file": ("empty.csv", b"", "text/csv")},
         )
         assert r.status_code == 400
-        assert r.json()["detail"] == "CSV vazio"
+        assert r.json()["detail"] == "Arquivo vazio"
 
 
-def test_csv_upload_limit_is_512_mb():
+def test_import_upload_limit_is_512_mb():
+    assert imports_endpoint.MAX_IMPORT_MEGABYTES == 512
+    assert imports_endpoint.MAX_IMPORT_BYTES == 512 * 1024 * 1024
     assert imports_endpoint.MAX_CSV_MEGABYTES == 512
     assert imports_endpoint.MAX_CSV_BYTES == 512 * 1024 * 1024
 
 
 def test_csv_preview_rejects_large_file(monkeypatch):
-    monkeypatch.setattr(imports_endpoint, "MAX_CSV_MEGABYTES", 1)
-    monkeypatch.setattr(imports_endpoint, "MAX_CSV_BYTES", 64)
+    monkeypatch.setattr(imports_endpoint, "MAX_IMPORT_MEGABYTES", 1)
+    monkeypatch.setattr(imports_endpoint, "MAX_IMPORT_BYTES", 64)
     with TestClient(app) as client:
         content = b"id_origem,abertura_em,municipio,tipo\n" + b"A" * 65
         r = client.post(
@@ -319,4 +492,4 @@ def test_csv_preview_rejects_large_file(monkeypatch):
             files={"file": ("large.csv", content, "text/csv")},
         )
         assert r.status_code == 413
-        assert r.json()["detail"] == "CSV excede o limite de 1 MB"
+        assert r.json()["detail"] == "Arquivo excede o limite de 1 MB"

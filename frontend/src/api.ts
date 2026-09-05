@@ -1,4 +1,4 @@
-import type { ApiList, AvailableFilters, CsvPreview, MonthlyResponse, NamedMetric, Overview, Sla } from "./types"
+import type { ApiList, AvailableFilters, CsvPreview, ImportCommit, MonthlyResponse, NamedMetric, Overview, Sla } from "./types"
 
 export type HealthStatus = { status:string; service:string }
 
@@ -94,6 +94,11 @@ export const api={
   previewCsv:(file:File)=>{
     const body = new FormData()
     body.append("file", file)
-    return postForm<CsvPreview>("/imports/csv/preview", body)
+    return postForm<CsvPreview>("/imports/preview", body)
+  },
+  commitImport:(file:File)=>{
+    const body = new FormData()
+    body.append("file", file)
+    return postForm<ImportCommit>("/imports", body)
   },
 }

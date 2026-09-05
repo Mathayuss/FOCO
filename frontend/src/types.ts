@@ -12,6 +12,7 @@ export type MonthlyComparison = { mes:string; v2025:number; v2026:number; delta:
 export type MonthlyResponse = FilterMetadata & { items:MonthlyItem[]; comparison:MonthlyComparison[]; source_scope:string }
 export type AvailableFilters = { periods:PeriodOption[]; types:string[]; municipalities:string[]; units:string[]; subtypes:string[]; shifts:string[]; filterable_dimensions:string[]; limited_dimensions:string[]; source_scope:string }
 export type CsvIssue = { row:number; issues:string[] }
+export type ColumnMapping = { source_header:string; target_field:string|null; required:boolean; status:string }
 export type CsvPreview = {
   headers:string[]
   recognized_headers:string[]
@@ -20,5 +21,29 @@ export type CsvPreview = {
   valid_rows:number
   invalid_rows:number
   issues:CsvIssue[]
+  can_commit:boolean
+  source_format:string
+  source_profile:string
+  column_mappings:ColumnMapping[]
+  unmapped_headers:string[]
+  sensitive_rows:number
+  invalid_coordinate_rows:number
+  missing_coordinate_rows:number
+  warnings:string[]
+}
+
+export type ImportCommit = {
+  source_format:string
+  source_profile:string
+  source_scope:string
+  total_rows:number
+  inserted_rows:number
+  skipped_duplicate_rows:number
+  invalid_rows:number
+  sensitive_rows:number
+  invalid_coordinate_rows:number
+  missing_coordinate_rows:number
+  issues:CsvIssue[]
+  warnings:string[]
   can_commit:boolean
 }
