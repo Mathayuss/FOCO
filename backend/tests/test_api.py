@@ -1,10 +1,11 @@
+from datetime import datetime, timezone
 from io import BytesIO
 from uuid import uuid4
 from xml.sax.saxutils import escape
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from app.main import app
 from app.api.endpoints import imports as imports_endpoint
 from app.db.session import SessionLocal
@@ -54,6 +55,29 @@ def _xlsx_bytes(headers: list[str], rows: list[list[str]]) -> bytes:
         zf.writestr("xl/worksheets/sheet1.xml", sheet)
     return buffer.getvalue()
 
+
+
+def _cleanup_imported_test_data(source_ids: list[str], unit_names: list[str]):
+    db = SessionLocal()
+    try:
+        if source_ids:
+            db.execute(
+                delete(Occurrence).where(
+                    Occurrence.source == "RELATORIO_SEJUSP",
+                    Occurrence.source_id.in_(source_ids),
+                )
+            )
+            db.commit()
+        for unit_name in unit_names:
+            unit = db.scalar(select(Unit).where(Unit.name == unit_name))
+            if not unit:
+                continue
+            remaining = db.scalar(select(Occurrence.id).where(Occurrence.unit_id == unit.id).limit(1))
+            if remaining is None:
+                db.delete(unit)
+        db.commit()
+    finally:
+        db.close()
 
 def test_health():
     with TestClient(app) as client:
@@ -271,44 +295,116 @@ def test_import_commit_inserts_sejusp_rows_with_equivalent_fields():
         f"COMBATE A INCENDIO,COMBATE A INCENDIO,{unit_name},Campo Grande,5002704,"
         "Centro,R. Teste,Próximo ao marco,-20.45,-54.62,Sim\n"
     ).encode("utf-8")
-    with TestClient(app) as client:
-        first = client.post(
-            "/api/v1/imports",
-            files={"file": ("sejusp.csv", content, "text/csv")},
-        ).json()
-        second = client.post(
-            "/api/v1/imports",
-            files={"file": ("sejusp.csv", content, "text/csv")},
-        ).json()
+    try:
+        with TestClient(app) as client:
+            first = client.post(
+                "/api/v1/imports",
+                files={"file": ("sejusp.csv", content, "text/csv")},
+            ).json()
+            second = client.post(
+                "/api/v1/imports",
+                files={"file": ("sejusp.csv", content, "text/csv")},
+            ).json()
 
-    assert first["inserted_rows"] == 1
-    assert first["skipped_duplicate_rows"] == 0
-    assert first["source_scope"] == "RELATORIO_SEJUSP"
-    assert second["inserted_rows"] == 0
-    assert second["skipped_duplicate_rows"] == 1
+        assert first["inserted_rows"] == 1
+        assert first["skipped_duplicate_rows"] == 0
+        assert first["source_scope"] == "RELATORIO_SEJUSP"
+        assert second["inserted_rows"] == 0
+        assert second["skipped_duplicate_rows"] == 1
 
+        db = SessionLocal()
+        try:
+            row = db.scalar(
+                select(Occurrence).where(
+                    Occurrence.source == "RELATORIO_SEJUSP",
+                    Occurrence.source_id == source_id,
+                )
+            )
+            assert row is not None
+            assert row.type_name == "INCENDIO EM VEGETACAO"
+            assert row.group_name == "COMBATE A INCENDIO"
+            assert row.subtype_name == "COMBATE A INCENDIO"
+            assert row.municipality == "Campo Grande"
+            assert row.ibge_code == "5002704"
+            assert row.status == "importada"
+            assert row.priority == "sigilo_judicial"
+            assert row.judicial_secret is True
+            assert row.source_payload and "Nº/ANO" in row.source_payload
+            assert row.unit and row.unit.name == unit_name
+        finally:
+            db.close()
+    finally:
+        _cleanup_imported_test_data([source_id], [unit_name])
+
+
+def test_analytics_sejusp_source_applies_cross_filters():
+    source_id = f"ANALYTICS-{uuid4()}"
+    unit_name = f"UNIDADE ANALYTICS {uuid4()}"
+    type_name = f"TIPO ANALYTICS {uuid4()}"
+    subtype_name = f"SUBTIPO ANALYTICS {uuid4()}"
+    municipality = f"Municipio Analytics {uuid4()}"
     db = SessionLocal()
     try:
-        row = db.scalar(
-            select(Occurrence).where(
-                Occurrence.source == "RELATORIO_SEJUSP",
-                Occurrence.source_id == source_id,
+        unit = Unit(name=unit_name, command="TESTE", active=True)
+        db.add(unit)
+        db.flush()
+        db.add(
+            Occurrence(
+                source="RELATORIO_SEJUSP",
+                source_id=source_id,
+                opened_at=datetime(2025, 1, 15, 14, 30, tzinfo=timezone.utc),
+                type_name=type_name,
+                group_name="GRUPO ANALYTICS",
+                subtype_name=subtype_name,
+                municipality=municipality,
+                neighborhood="Centro",
+                latitude=-20.45,
+                longitude=-54.62,
+                unit_id=unit.id,
+                status="importada",
+                judicial_secret=False,
             )
         )
-        assert row is not None
-        assert row.type_name == "INCENDIO EM VEGETACAO"
-        assert row.group_name == "COMBATE A INCENDIO"
-        assert row.subtype_name == "COMBATE A INCENDIO"
-        assert row.municipality == "Campo Grande"
-        assert row.ibge_code == "5002704"
-        assert row.status == "importada"
-        assert row.priority == "sigilo_judicial"
-        assert row.judicial_secret is True
-        assert row.source_payload and "Nº/ANO" in row.source_payload
-        assert row.unit and row.unit.name == unit_name
+        db.commit()
     finally:
         db.close()
 
+    try:
+        with TestClient(app) as client:
+            filters = client.get("/api/v1/analytics/filters", params={"source": "sejusp"}).json()
+            assert filters["source_scope"] == "sejusp_importado"
+            assert filters["limited_dimensions"] == []
+            assert type_name in filters["types"]
+            assert municipality in filters["municipalities"]
+            assert unit_name in filters["units"]
+            assert subtype_name in filters["subtypes"]
+
+            params = {
+                "source": "sejusp",
+                "period": "jan",
+                "type": type_name,
+                "municipality": municipality,
+                "unit": unit_name,
+                "subtype": subtype_name,
+                "shift": "Tarde",
+            }
+            overview = client.get("/api/v1/analytics/overview", params=params).json()
+            cities = client.get("/api/v1/analytics/cities", params=params).json()
+            hours = client.get("/api/v1/analytics/hours", params=params).json()
+
+        assert overview["total"] == 1
+        assert overview["source_scope"] == "sejusp_importado"
+        assert overview["applied_filters"]["municipality"] == municipality
+        assert overview["applied_filters"]["unit"] == unit_name
+        assert overview["applied_filters"]["subtype"] == subtype_name
+        assert overview["applied_filters"]["shift"] == "Tarde"
+        assert overview["coverage"]["limited_dimensions"] == []
+        assert overview["comparison"]["available"] is False
+        assert cities["items"][0]["nome"] == municipality
+        assert cities["items"][0]["total"] == 1
+        assert hours["items"][14] == 1
+    finally:
+        _cleanup_imported_test_data([source_id], [unit_name])
 
 def test_analytics_period_filter_recalculates_overview():
     with TestClient(app) as client:
@@ -416,6 +512,15 @@ def test_dimension_endpoints_apply_their_own_dimension():
         assert unit["applied_filters"]["unit"] == "CMB/1ºGBM"
         assert [item["nome"] for item in shift["items"]] == ["Tarde"]
         assert shift["applied_filters"]["shift"] == "Tarde"
+
+
+def test_analytics_rejects_invalid_source():
+    with TestClient(app) as client:
+        r = client.get("/api/v1/analytics/overview?source=invalida")
+        data = r.json()
+        assert r.status_code == 400
+        assert data["detail"]["code"] == "INVALID_FILTER"
+        assert data["detail"]["errors"][0]["field"] == "source"
 
 
 def test_analytics_rejects_invalid_period():

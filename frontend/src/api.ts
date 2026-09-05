@@ -6,6 +6,7 @@ const configuredBase = import.meta.env.VITE_API_URL as string | undefined
 const runtimeBase = `${window.location.protocol}//${window.location.hostname}:8000/api/v1`
 
 export type AnalyticsParams = {
+  source?: string
   period?: string
   type?: string
   municipality?: string
@@ -17,7 +18,7 @@ export type AnalyticsParams = {
 type ApiErrorPayload = { code?: string; errors?: { field:string; value:string; allowed?: string[] }[] }
 
 function formatFilterIssue(issue:{ field:string; value:string; allowed?: string[] }){
-  const labels:Record<string,string>={period:"período",type:"tipificação",municipality:"município",unit:"unidade",subtype:"subtipo",shift:"turno"}
+  const labels:Record<string,string>={source:"fonte",period:"período",type:"tipificação",municipality:"município",unit:"unidade",subtype:"subtipo",shift:"turno"}
   const allowed = issue.allowed?.length ? ` Valores aceitos: ${issue.allowed.join(", ")}.` : ""
   return `${labels[issue.field] || issue.field}=\"${issue.value}\".${allowed}`
 }
@@ -89,7 +90,7 @@ export const api={
   hours:(params?:AnalyticsParams)=>get<ApiList<number>>("/analytics/hours", params),
   units:(params?:AnalyticsParams)=>get<ApiList<NamedMetric>>("/analytics/units", params),
   shifts:(params?:AnalyticsParams)=>get<ApiList<NamedMetric>>("/analytics/shifts", params),
-  filters:()=>get<AvailableFilters>("/analytics/filters"),
+  filters:(params?:AnalyticsParams)=>get<AvailableFilters>("/analytics/filters", params),
   sla:()=>get<Sla>("/analytics/sla"),
   previewCsv:(file:File)=>{
     const body = new FormData()
