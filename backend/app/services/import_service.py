@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+from html import unescape
 from html.parser import HTMLParser
 import re
 import unicodedata
@@ -45,6 +46,20 @@ CANONICAL_COLUMNS = {
     "retorno_em",
     "disponibilidade_em",
 }
+AUXILIARY_COLUMNS = {
+    "area_municipio",
+    "autoria",
+    "dia_registro",
+    "faixa_idade",
+    "forca",
+    "local",
+    "motivacao",
+    "movimentacao",
+    "municipio_origem",
+    "periodo_registro",
+    "uf",
+    "uf_origem",
+}
 REQUIRED = {"id_origem", "abertura_em", "municipio", "tipo"}
 
 HEADER_ALIASES_RAW = {
@@ -67,11 +82,15 @@ HEADER_ALIASES_RAW = {
     "FATO": "tipo",
     "FATO AGRUPADO": "grupo",
     "CATEGORIA": "subtipo",
+    "AUTORIA CONHECIDA / DESCONHECIDA": "autoria",
+    "MOTIVAÇÃO": "motivacao",
+    "MOTIVACAO": "motivacao",
     "UNIDADE DE ORIGEM": "unidade_operacional",
     "DATA DO FATO": "data_fato",
     "HORA DO FATO": "hora_fato",
     "DATA DO REGISTRO": "data_registro",
     "HORA DO REGISTRO": "hora_registro",
+    "DIA DO REGISTRO": "dia_registro",
     "MUNICÍPIO": "municipio",
     "MUNICIPIO": "municipio",
     "MUNICÍPIO DE ORIGEM": "municipio_origem",
@@ -87,6 +106,7 @@ HEADER_ALIASES_RAW = {
     "SEGREDO DE JUSTICA": "segredo_de_justica",
     "PERÍODO DO REGISTRO": "periodo_registro",
     "PERIODO DO REGISTRO": "periodo_registro",
+    "FAIXA IDADE": "faixa_idade",
     "LOCAL": "local",
     "ÁREA DO MUNICÍPIO": "area_municipio",
     "AREA DO MUNICIPIO": "area_municipio",
@@ -123,7 +143,10 @@ HEADER_ALIASES = {}
 
 
 def _header_key(header: str | None) -> str:
-    text = unicodedata.normalize("NFKD", header or "")
+    text = unescape(str(header or ""))
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = text.replace("\ufeff", "").replace("\xa0", " ")
+    text = unicodedata.normalize("NFKD", text)
     text = "".join(ch for ch in text if not unicodedata.combining(ch))
     text = text.upper().strip()
     return re.sub(r"\s+", " ", text)
@@ -152,7 +175,8 @@ def _target_for_header(header: str | None) -> str | None:
 def _public_target(target: str | None) -> str | None:
     if not target:
         return None
-    return DERIVED_TARGETS.get(target, target if target in CANONICAL_COLUMNS else None)
+    public = DERIVED_TARGETS.get(target, target)
+    return public if public in CANONICAL_COLUMNS or public in AUXILIARY_COLUMNS else None
 
 
 def _source_profile(headers: list[str]) -> str:
@@ -244,14 +268,7 @@ def _read_xlsx(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
                 values[index] = _cell_text(cell, shared)
             rows.append([values[index] for index in range(1, max_col + 1)])
             row.clear()
-    if not rows:
-        return [], []
-    headers = rows[0]
-    data_rows = []
-    for row in rows[1:]:
-        padded = row + [""] * (len(headers) - len(row))
-        data_rows.append({header: padded[index] if index < len(padded) else "" for index, header in enumerate(headers)})
-    return headers, data_rows
+    return _rows_to_dicts(rows)
 
 
 class _HtmlTableParser(HTMLParser):
@@ -292,14 +309,43 @@ class _HtmlTableParser(HTMLParser):
             self._in_table = False
 
 
+def _recognized_targets(row: list[str]) -> set[str]:
+    return {
+        target
+        for value in row
+        if (target := _public_target(_target_for_header(str(value or ""))))
+    }
+
+
+def _header_row_index(rows: list[list[str]]) -> int:
+    best_index = 0
+    best_score = -1
+    for index, row in enumerate(rows[:50]):
+        targets = _recognized_targets(row)
+        required_count = len(targets & REQUIRED)
+        score = required_count * 100 + len(targets)
+        if score > best_score:
+            best_index = index
+            best_score = score
+        if required_count == len(REQUIRED):
+            return index
+    return best_index if best_score > 0 else 0
+
+
+def _is_separator_row(row: list[str]) -> bool:
+    non_empty = [cell for cell in row if cell]
+    return bool(non_empty) and all(re.fullmatch(r":?-{2,}:?", cell.strip()) for cell in non_empty)
+
+
 def _rows_to_dicts(rows: list[list[str]]) -> tuple[list[str], list[dict[str, str]]]:
     if not rows:
         return [], []
-    headers = [str(value or "").strip() for value in rows[0]]
+    header_index = _header_row_index(rows)
+    headers = [str(value or "").strip() for value in rows[header_index]]
     data_rows = []
-    for row in rows[1:]:
+    for row in rows[header_index + 1:]:
         padded = [str(value or "").strip() for value in row] + [""] * (len(headers) - len(row))
-        if not any(padded):
+        if not any(padded) or _is_separator_row(padded):
             continue
         data_rows.append({header: padded[index] if index < len(padded) else "" for index, header in enumerate(headers)})
     return headers, data_rows
@@ -320,17 +366,29 @@ def _read_xls_html(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
     return _rows_to_dicts(parser.rows)
 
 
-def _read_xls_delimited(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
-    text = _decode_xls_text(content)
+def _detect_delimiter(sample: str) -> str | None:
+    lines = [line for line in sample.splitlines() if line.strip()][:8]
+    scores = {delimiter: sum(line.count(delimiter) for line in lines) for delimiter in (";", "\t", ",", "|")}
+    delimiter, count = max(scores.items(), key=lambda item: item[1])
+    return delimiter if count else None
+
+
+def _read_delimited_text(text: str) -> tuple[list[str], list[dict[str, str]]]:
     sample = text[:4096]
-    try:
-        dialect = csv.Sniffer().sniff(sample, delimiters="\t;,")
-    except csv.Error:
-        dialect = csv.excel_tab if "\t" in sample else csv.excel
-    reader = csv.DictReader(io.StringIO(text), dialect=dialect)
-    headers = reader.fieldnames or []
-    rows = [{header: value or "" for header, value in row.items() if header is not None} for row in reader]
-    return headers, rows
+    delimiter = _detect_delimiter(sample)
+    if delimiter:
+        rows = [row for row in csv.reader(io.StringIO(text), delimiter=delimiter)]
+    else:
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters="\t;,|")
+        except csv.Error:
+            dialect = csv.excel
+        rows = [row for row in csv.reader(io.StringIO(text), dialect=dialect)]
+    return _rows_to_dicts(rows)
+
+
+def _read_xls_delimited(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
+    return _read_delimited_text(_decode_xls_text(content))
 
 
 def _read_xls_binary(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
@@ -369,17 +427,11 @@ def _read_xls(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
 
 
 def _read_csv(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
-    text = content.decode("utf-8-sig")
-    reader = csv.DictReader(io.StringIO(text))
-    headers = reader.fieldnames or []
-    rows = []
-    for row in reader:
-        rows.append({header: value or "" for header, value in row.items() if header is not None})
-    return headers, rows
+    return _read_delimited_text(content.decode("utf-8-sig"))
 
 
 def read_import_rows(content: bytes, filename: str) -> tuple[str, list[str], list[dict[str, str]]]:
-    source_format = _source_format(filename)
+    source_format = "xlsx" if zipfile.is_zipfile(io.BytesIO(content)) else _source_format(filename)
     if source_format == "xlsx":
         headers, rows = _read_xlsx(content)
     elif source_format == "xls":

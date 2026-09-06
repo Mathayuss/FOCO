@@ -243,9 +243,40 @@ def test_import_preview_maps_sejusp_csv_headers_to_foco_fields():
     assert mappings["UNIDADE DE ORIGEM"] == "unidade_operacional"
 
 
+def test_import_preview_accepts_sejusp_headers_with_extra_spaces_and_markup():
+    content = (
+        "Nº/ANO;FORÇA;MOVIMENTAÇÃO;SEGREDO DE   JUSTIÇA;FATO;FATO AGRUPADO;CATEGORIA;"
+        "AUTORIA CONHECIDA / DESCONHECIDA;MOTIVAÇÃO;UNIDADE DE   ORIGEM;UF DE ORIGEM;"
+        "MUNICÍPIO DE   ORIGEM;DATA DO REGISTRO;HORA DO REGISTRO;DIA DO REGISTRO;"
+        "PERÍODO DO   REGISTRO;DATA DO FATO;HORA DO FATO;FAIXA IDADE;LOCAL;UF;"
+        "MUNICÍPIO;CÓDIGO IBGE;BAIRRO;REFERÊNCIA;ÁREA DO   MUNICÍPIO;LOGRADOURO;"
+        "LATITUDE;LONGITUDE<br>\n"
+        "103/2025 1º GBM;CBMMS;Entrada;Não;REMOCAO AO PS;BUSCA E SALVAMENTO;"
+        "BUSCA E SALVAMENTO;;;1º GBM;MS;Campo Grande;01/01/2025;08:10;quarta;"
+        "Manhã;01/01/2025;08:20;Adulto;Via pública;MS;Campo Grande;5002704;Centro;"
+        "Próximo ao marco;Urbana;R. Teste;-20.45;-54.62\n"
+    ).encode("utf-8")
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/v1/imports/preview",
+            files={"file": ("sejusp.xls", content, "text/html")},
+        )
+    data = r.json()
+    mappings = {item["source_header"]: item["target_field"] for item in data["column_mappings"]}
+    assert r.status_code == 200
+    assert data["source_format"] == "xls"
+    assert data["valid_rows"] == 1
+    assert data["missing_required_headers"] == []
+    assert mappings["SEGREDO DE   JUSTIÇA"] == "segredo_de_justica"
+    assert mappings["UNIDADE DE   ORIGEM"] == "unidade_operacional"
+    assert mappings["PERÍODO DO   REGISTRO"] == "periodo_registro"
+    assert mappings["LONGITUDE<br>"] == "longitude"
+
+
 def test_import_preview_accepts_sejusp_xls_html_report_headers():
     body = """<html><body><table>
-    <tr><th>Nº/ANO</th><th>DATA DO FATO</th><th>HORA DO FATO</th><th>FATO</th><th>FATO AGRUPADO</th><th>CATEGORIA</th><th>UNIDADE DE ORIGEM</th><th>MUNICÍPIO</th><th>LATITUDE</th><th>LONGITUDE</th><th>SEGREDO DE JUSTIÇA</th></tr>
+    <tr><td colspan="11">Relatório de ocorrências</td></tr>
+    <tr><th>Nº/ANO</th><th>DATA DO FATO</th><th>HORA DO FATO</th><th>FATO</th><th>FATO AGRUPADO</th><th>CATEGORIA</th><th>UNIDADE DE   ORIGEM</th><th>MUNICÍPIO</th><th>LATITUDE</th><th>LONGITUDE<br></th><th>SEGREDO DE   JUSTIÇA</th></tr>
     <tr><td>102/2025 1º GBM</td><td>01/01/2025</td><td>13:45</td><td>REMOCAO AO PS</td><td>BUSCA E SALVAMENTO</td><td>BUSCA E SALVAMENTO</td><td>1º GBM</td><td>Campo Grande</td><td>-20.45</td><td>-54.62</td><td>Não</td></tr>
     </table></body></html>""".encode("utf-8")
     with TestClient(app) as client:

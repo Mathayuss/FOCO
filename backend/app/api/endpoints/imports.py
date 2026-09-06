@@ -16,6 +16,7 @@ MAX_CSV_BYTES = MAX_IMPORT_BYTES
 ALLOWED_EXTENSIONS = {".csv", ".xls", ".xlsx"}
 ALLOWED_IMPORT_MIME_TYPES = {
     "text/csv",
+    "text/html",
     "application/csv",
     "application/vnd.ms-excel",
     "application/excel",

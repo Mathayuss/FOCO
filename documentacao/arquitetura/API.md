@@ -76,9 +76,10 @@ POST /api/v1/imports
 GET /api/v1/imports/{id}
 ```
 
-O preview aceita arquivos CSV, XLS ou XLSX de até 512 MB, com validação de extensão, MIME, nome de arquivo e conteúdo UTF-8 quando CSV. Arquivos XLS podem ser planilhas HTML/TSV exportadas por sistemas legados ou XLS binário antigo quando a dependência `xlrd` estiver instalada.
+O preview aceita arquivos CSV, XLS ou XLSX de até 512 MB, com validação de extensão, MIME, nome de arquivo e conteúdo UTF-8 quando CSV. Arquivos XLS podem ser planilhas HTML/TSV exportadas por sistemas legados ou XLS binário antigo quando a dependência `xlrd` estiver instalada. O parser detecta `;`, tabulação, vírgula e `|`, localiza a linha real de cabeçalho quando houver título acima da tabela e limpa marcações como `<br>` nos nomes das colunas.
 Cabeçalhos canônicos obrigatórios: `id_origem`, `abertura_em`, `municipio` e `tipo`.
-Cabeçalhos opcionais reconhecidos: `grupo`, `subtipo`, `unidade_operacional`, `bairro`, `endereco`, `registro_em`, `codigo_ibge`, `segredo_de_justica`, `latitude`, `longitude`, `codigo_viatura`, `tipo_viatura`, `despacho_em`, `saida_em`, `chegada_em`, `liberacao_em`, `retorno_em` e `disponibilidade_em`.
+Cabeçalhos opcionais reconhecidos para persistência normalizada: `grupo`, `subtipo`, `unidade_operacional`, `bairro`, `endereco`, `registro_em`, `codigo_ibge`, `segredo_de_justica`, `latitude`, `longitude`, `codigo_viatura`, `tipo_viatura`, `despacho_em`, `saida_em`, `chegada_em`, `liberacao_em`, `retorno_em` e `disponibilidade_em`.
+Cabeçalhos auxiliares reconhecidos para auditoria/rastreabilidade no preview e preservados em `dados_origem`: `forca`, `movimentacao`, `autoria`, `motivacao`, `uf_origem`, `municipio_origem`, `dia_registro`, `periodo_registro`, `faixa_idade`, `local`, `uf` e `area_municipio`.
 
 Relatórios SEJUSP são aceitos por equivalência automática de cabeçalhos:
 
