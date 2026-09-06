@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+from html.parser import HTMLParser
 import re
 import unicodedata
 import zipfile
@@ -167,6 +168,8 @@ def _source_format(filename: str) -> str:
     lowered = filename.lower()
     if lowered.endswith(".xlsx"):
         return "xlsx"
+    if lowered.endswith(".xls"):
+        return "xls"
     return "csv"
 
 
@@ -251,6 +254,120 @@ def _read_xlsx(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
     return headers, data_rows
 
 
+class _HtmlTableParser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.rows: list[list[str]] = []
+        self._row: list[str] | None = None
+        self._cell: list[str] | None = None
+        self._in_table = False
+
+    def handle_starttag(self, tag: str, attrs):
+        tag = tag.lower()
+        if tag == "table" and not self._in_table:
+            self._in_table = True
+        if not self._in_table:
+            return
+        if tag == "tr":
+            self._row = []
+        elif tag in {"td", "th"} and self._row is not None:
+            self._cell = []
+
+    def handle_data(self, data: str):
+        if self._cell is not None:
+            self._cell.append(data)
+
+    def handle_endtag(self, tag: str):
+        tag = tag.lower()
+        if not self._in_table:
+            return
+        if tag in {"td", "th"} and self._row is not None and self._cell is not None:
+            self._row.append(re.sub(r"\s+", " ", "".join(self._cell)).strip())
+            self._cell = None
+        elif tag == "tr" and self._row is not None:
+            if any(cell for cell in self._row):
+                self.rows.append(self._row)
+            self._row = None
+        elif tag == "table":
+            self._in_table = False
+
+
+def _rows_to_dicts(rows: list[list[str]]) -> tuple[list[str], list[dict[str, str]]]:
+    if not rows:
+        return [], []
+    headers = [str(value or "").strip() for value in rows[0]]
+    data_rows = []
+    for row in rows[1:]:
+        padded = [str(value or "").strip() for value in row] + [""] * (len(headers) - len(row))
+        if not any(padded):
+            continue
+        data_rows.append({header: padded[index] if index < len(padded) else "" for index, header in enumerate(headers)})
+    return headers, data_rows
+
+
+def _decode_xls_text(content: bytes) -> str:
+    for encoding in ("utf-8-sig", "latin-1"):
+        try:
+            return content.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    raise ValueError("Arquivo XLS textual deve estar em UTF-8 ou Latin-1")
+
+
+def _read_xls_html(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
+    parser = _HtmlTableParser()
+    parser.feed(_decode_xls_text(content))
+    return _rows_to_dicts(parser.rows)
+
+
+def _read_xls_delimited(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
+    text = _decode_xls_text(content)
+    sample = text[:4096]
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters="\t;,")
+    except csv.Error:
+        dialect = csv.excel_tab if "\t" in sample else csv.excel
+    reader = csv.DictReader(io.StringIO(text), dialect=dialect)
+    headers = reader.fieldnames or []
+    rows = [{header: value or "" for header, value in row.items() if header is not None} for row in reader]
+    return headers, rows
+
+
+def _read_xls_binary(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
+    try:
+        import xlrd
+    except ModuleNotFoundError as exc:
+        raise ValueError("Arquivo XLS binário requer a dependência xlrd instalada no backend") from exc
+    workbook = xlrd.open_workbook(file_contents=content)
+    if not workbook.nsheets:
+        return [], []
+    sheet = workbook.sheet_by_index(0)
+    rows = []
+    for row_index in range(sheet.nrows):
+        row = []
+        for col_index in range(sheet.ncols):
+            cell = sheet.cell(row_index, col_index)
+            if cell.ctype == xlrd.XL_CELL_DATE:
+                parsed = xlrd.xldate_as_datetime(cell.value, workbook.datemode)
+                row.append(parsed.strftime("%d/%m/%Y %H:%M:%S" if parsed.time().isoformat() != "00:00:00" else "%d/%m/%Y"))
+            elif cell.ctype == xlrd.XL_CELL_NUMBER:
+                value = int(cell.value) if float(cell.value).is_integer() else cell.value
+                row.append(str(value))
+            else:
+                row.append(str(cell.value or "").strip())
+        rows.append(row)
+    return _rows_to_dicts(rows)
+
+
+def _read_xls(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
+    if content.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"):
+        return _read_xls_binary(content)
+    text_prefix = content[:2048].lstrip().lower()
+    if b"<html" in text_prefix or b"<table" in text_prefix:
+        return _read_xls_html(content)
+    return _read_xls_delimited(content)
+
+
 def _read_csv(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
     text = content.decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(text))
@@ -265,6 +382,8 @@ def read_import_rows(content: bytes, filename: str) -> tuple[str, list[str], lis
     source_format = _source_format(filename)
     if source_format == "xlsx":
         headers, rows = _read_xlsx(content)
+    elif source_format == "xls":
+        headers, rows = _read_xls(content)
     else:
         headers, rows = _read_csv(content)
     return source_format, headers, rows

@@ -194,7 +194,7 @@ def test_csv_preview_rejects_non_csv_extension():
             files={"file": ("sample.txt", b"id_origem\nEX-001\n", "text/plain")},
         )
         assert r.status_code == 400
-        assert r.json()["detail"] == "Envie um arquivo CSV ou XLSX"
+        assert r.json()["detail"] == "Envie um arquivo CSV, XLS ou XLSX"
 
 
 def test_csv_preview_accepts_legacy_english_headers_as_aliases():
@@ -241,6 +241,25 @@ def test_import_preview_maps_sejusp_csv_headers_to_foco_fields():
     assert mappings["DATA DO FATO"] == "abertura_em"
     assert mappings["FATO"] == "tipo"
     assert mappings["UNIDADE DE ORIGEM"] == "unidade_operacional"
+
+
+def test_import_preview_accepts_sejusp_xls_html_report_headers():
+    body = """<html><body><table>
+    <tr><th>Nº/ANO</th><th>DATA DO FATO</th><th>HORA DO FATO</th><th>FATO</th><th>FATO AGRUPADO</th><th>CATEGORIA</th><th>UNIDADE DE ORIGEM</th><th>MUNICÍPIO</th><th>LATITUDE</th><th>LONGITUDE</th><th>SEGREDO DE JUSTIÇA</th></tr>
+    <tr><td>102/2025 1º GBM</td><td>01/01/2025</td><td>13:45</td><td>REMOCAO AO PS</td><td>BUSCA E SALVAMENTO</td><td>BUSCA E SALVAMENTO</td><td>1º GBM</td><td>Campo Grande</td><td>-20.45</td><td>-54.62</td><td>Não</td></tr>
+    </table></body></html>""".encode("utf-8")
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/v1/imports/preview",
+            files={"file": ("sejusp.xls", body, "application/vnd.ms-excel")},
+        )
+    data = r.json()
+    assert r.status_code == 200
+    assert data["source_format"] == "xls"
+    assert data["source_profile"] == "RELATORIO_SEJUSP"
+    assert data["valid_rows"] == 1
+    assert data["missing_required_headers"] == []
+    assert "abertura_em" in data["recognized_headers"]
 
 
 def test_import_preview_accepts_sejusp_xlsx_report_headers():

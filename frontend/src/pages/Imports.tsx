@@ -37,13 +37,13 @@ export default function Imports(){
 
  const status = preview?.can_commit ? "Pronto para validação final" : preview ? "Pendências encontradas" : loading ? "Analisando arquivo" : "Aguardando arquivo"
  return <>
-  <div className="pageHead"><div><div className="eyebrow">DADOS / IMPORTAÇÕES</div><h1>Importações</h1><p>Pré-validação de arquivos CSV/XLSX antes de consolidar ocorrências operacionais.</p></div><span className={`badge ${preview?.can_commit?"ok":"warn"}`}>{status}</span></div>
+  <div className="pageHead"><div><div className="eyebrow">DADOS / IMPORTAÇÕES</div><h1>Importações</h1><p>Pré-validação de arquivos CSV/XLS/XLSX antes de consolidar ocorrências operacionais.</p></div><span className={`badge ${preview?.can_commit?"ok":"warn"}`}>{status}</span></div>
   <div className="importGrid">
    <section className="uploadPanel">
     <label className={`dropZone ${loading?"loading":""}`}>
-     <input type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={e=>handleFile(e.target.files?.[0]||null)}/>
-     <span className="dropIcon">CSV</span>
-     <b>{file?.name || "Selecionar CSV/XLSX de ocorrências"}</b>
+     <input type="file" accept=".csv,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={e=>handleFile(e.target.files?.[0]||null)}/>
+     <span className="dropIcon">ARQ</span>
+     <b>{file?.name || "Selecionar CSV/XLS/XLSX de ocorrências"}</b>
      <small>{file ? `${(file.size/1024).toFixed(1).replace(".",",")} KB` : `FOCO ou relatório SEJUSP · limite ${MAX_IMPORT_UPLOAD_MB} MB`}</small>
     </label>
     {error && <div className="errorBox">{error}</div>}

@@ -13,11 +13,14 @@ MAX_IMPORT_MEGABYTES = 512
 MAX_IMPORT_BYTES = MAX_IMPORT_MEGABYTES * 1024 * 1024
 MAX_CSV_MEGABYTES = MAX_IMPORT_MEGABYTES
 MAX_CSV_BYTES = MAX_IMPORT_BYTES
-ALLOWED_EXTENSIONS = {".csv", ".xlsx"}
+ALLOWED_EXTENSIONS = {".csv", ".xls", ".xlsx"}
 ALLOWED_IMPORT_MIME_TYPES = {
     "text/csv",
     "application/csv",
     "application/vnd.ms-excel",
+    "application/excel",
+    "application/x-excel",
+    "application/x-msexcel",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/octet-stream",
 }
@@ -29,7 +32,7 @@ def _validate_upload_metadata(file: UploadFile) -> str:
         raise HTTPException(status_code=400, detail="Nome de arquivo inválido")
     suffix = PurePath(filename).suffix.lower()
     if suffix not in ALLOWED_EXTENSIONS:
-        raise HTTPException(status_code=400, detail="Envie um arquivo CSV ou XLSX")
+        raise HTTPException(status_code=400, detail="Envie um arquivo CSV, XLS ou XLSX")
     content_type = (file.content_type or "").split(";", 1)[0].lower()
     if content_type and content_type not in ALLOWED_IMPORT_MIME_TYPES:
         raise HTTPException(status_code=400, detail="Tipo MIME inválido para importação")
