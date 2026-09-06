@@ -337,14 +337,24 @@ def _is_separator_row(row: list[str]) -> bool:
     return bool(non_empty) and all(re.fullmatch(r":?-{2,}:?", cell.strip()) for cell in non_empty)
 
 
+def _trim_outer_empty_cells(row: list[str]) -> list[str]:
+    values = [str(value or "").strip() for value in row]
+    while values and not values[0]:
+        values = values[1:]
+    while values and not values[-1]:
+        values = values[:-1]
+    return values
+
+
 def _rows_to_dicts(rows: list[list[str]]) -> tuple[list[str], list[dict[str, str]]]:
     if not rows:
         return [], []
-    header_index = _header_row_index(rows)
-    headers = [str(value or "").strip() for value in rows[header_index]]
+    normalized_rows = [_trim_outer_empty_cells(row) for row in rows]
+    header_index = _header_row_index(normalized_rows)
+    headers = normalized_rows[header_index]
     data_rows = []
-    for row in rows[header_index + 1:]:
-        padded = [str(value or "").strip() for value in row] + [""] * (len(headers) - len(row))
+    for row in normalized_rows[header_index + 1:]:
+        padded = row + [""] * (len(headers) - len(row))
         if not any(padded) or _is_separator_row(padded):
             continue
         data_rows.append({header: padded[index] if index < len(padded) else "" for index, header in enumerate(headers)})

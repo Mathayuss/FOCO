@@ -273,6 +273,39 @@ def test_import_preview_accepts_sejusp_headers_with_extra_spaces_and_markup():
     assert mappings["LONGITUDE<br>"] == "longitude"
 
 
+def test_import_preview_accepts_markdown_pipe_table_headers():
+    content = '| Nº/ANO | FORÇA | MOVIMENTAÇÃO | SEGREDO DE   JUSTIÇA | FATO | FATO AGRUPADO | CATEGORIA | AUTORIA   CONHECIDA / DESCONHECIDA | MOTIVAÇÃO | UNIDADE DE   ORIGEM | UF DE ORIGEM | MUNICÍPIO DE   ORIGEM | DATA DO REGISTRO | HORA DO REGISTRO | DIA DO REGISTRO | PERÍODO DO   REGISTRO | DATA DO FATO | HORA DO FATO | FAIXA IDADE | LOCAL | UF | MUNICÍPIO | CÓDIGO IBGE | BAIRRO | REFERÊNCIA | ÁREA DO   MUNICÍPIO | LOGRADOURO | LATITUDE | LONGITUDE |\n| ------ | ----- | ------------ | -------------------- | ---- | ------------- | --------- | ---------------------------------- | --------- | ------------------- | ------------ | --------------------- | ---------------- | ---------------- | --------------- | --------------------- | ------------ | ------------ | ----------- | ----- | -- | --------- | ----------- | ------ | ---------- | ------------------- | ---------- | -------- | --------- |\n| 104/2025 1º GBM | CBMMS | Entrada | Não | REMOCAO AO PS | BUSCA E SALVAMENTO | BUSCA E SALVAMENTO | Conhecida | Teste | 1º GBM | MS | Campo Grande | 01/01/2025 | 08:10 | quarta | Manhã | 01/01/2025 | 08:20 | Adulto | Via pública | MS | Campo Grande | 5002704 | Centro | Próximo ao marco | Urbana | R. Teste | -20.45 | -54.62 |\n'.encode("utf-8")
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/v1/imports/preview",
+            files={"file": ("sejusp.xls", content, "application/vnd.ms-excel")},
+        )
+    data = r.json()
+    mappings = {item["source_header"]: item["target_field"] for item in data["column_mappings"]}
+    assert r.status_code == 200
+    assert data["source_format"] == "xls"
+    assert data["valid_rows"] == 1
+    assert data["missing_required_headers"] == []
+    assert "" not in data["headers"]
+    assert mappings["AUTORIA   CONHECIDA / DESCONHECIDA"] == "autoria"
+    assert mappings["LONGITUDE"] == "longitude"
+
+
+def test_import_preview_accepts_xlsx_content_renamed_as_xls():
+    headers = ["Nº/ANO", "DATA DO FATO", "HORA DO FATO", "FATO", "UNIDADE DE ORIGEM", "MUNICÍPIO"]
+    body = _xlsx_bytes(headers, [["105/2025 1º GBM", "01/01/2025", "12:30", "REMOCAO AO PS", "1º GBM", "Campo Grande"]])
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/v1/imports/preview",
+            files={"file": ("sejusp.xls", body, "application/vnd.ms-excel")},
+        )
+    data = r.json()
+    assert r.status_code == 200
+    assert data["source_format"] == "xlsx"
+    assert data["source_profile"] == "RELATORIO_SEJUSP"
+    assert data["valid_rows"] == 1
+
+
 def test_import_preview_accepts_sejusp_xls_html_report_headers():
     body = """<html><body><table>
     <tr><td colspan="11">Relatório de ocorrências</td></tr>
