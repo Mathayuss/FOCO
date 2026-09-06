@@ -87,7 +87,7 @@ export default function App(){
   "Território":<TerritoryPage {...common}/>,
   "SLA":<SlaPage/>,
   "Unidades":<UnitsPage {...common}/>,
-  "Importações":<Imports/>,
+  "Importações":<Imports setGlobalFilters={setGlobalFilters} onShowDashboard={()=>setActive("Visão Geral")}/>,
   "Qualidade":<QualityPage/>,
  }
  const page = pages[active] || <Placeholder name={active}/>

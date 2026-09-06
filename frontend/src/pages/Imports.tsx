@@ -1,21 +1,29 @@
 import React, { useState } from "react"
 import { api } from "../api"
+import type { SetGlobalFilters } from "../filterState"
 import type { CsvPreview, ImportCommit } from "../types"
 
 const pct=(part:number,total:number)=>total?`${Math.round(part/total*100)}%`:"0%"
 const MAX_IMPORT_UPLOAD_MB=512
 const MAX_IMPORT_UPLOAD_BYTES=MAX_IMPORT_UPLOAD_MB*1024*1024
+const SEJUSP_DASHBOARD_FILTERS = {source:"sejusp",period:"all",type:"",municipality:"",unit:"",subtype:"",shift:""}
 
-export default function Imports(){
+type ImportsProps = {
+ setGlobalFilters: SetGlobalFilters
+ onShowDashboard: () => void
+}
+
+export default function Imports({setGlobalFilters,onShowDashboard}:ImportsProps){
  const [file,setFile]=useState<File|null>(null)
  const [preview,setPreview]=useState<CsvPreview|null>(null)
  const [loading,setLoading]=useState(false)
  const [committing,setCommitting]=useState(false)
  const [commit,setCommit]=useState<ImportCommit|null>(null)
+ const [dashboardReady,setDashboardReady]=useState(false)
  const [error,setError]=useState("")
 
  async function handleFile(next:File|null){
-  setFile(next); setPreview(null); setCommit(null); setError("")
+  setFile(next); setPreview(null); setCommit(null); setDashboardReady(false); setError("")
   if(!next) return
   if(next.size>MAX_IMPORT_UPLOAD_BYTES){
    setError(`Arquivo excede o limite de ${MAX_IMPORT_UPLOAD_MB} MB`)
@@ -30,9 +38,21 @@ export default function Imports(){
  async function commitFile(){
   if(!file || !preview?.valid_rows) return
   setCommitting(true); setError("")
-  try{ setCommit(await api.commitImport(file)) }
+  try{
+   const result = await api.commitImport(file)
+   setCommit(result)
+   if(result.source_scope==="RELATORIO_SEJUSP" && (result.inserted_rows>0 || result.skipped_duplicate_rows>0)){
+    setGlobalFilters(SEJUSP_DASHBOARD_FILTERS)
+    setDashboardReady(true)
+   }
+  }
   catch(e){ setError(e instanceof Error ? e.message : "Falha ao importar arquivo") }
   finally{ setCommitting(false) }
+ }
+
+ function openSejuspDashboard(){
+  setGlobalFilters(SEJUSP_DASHBOARD_FILTERS)
+  onShowDashboard()
  }
 
  const status = preview?.can_commit ? "Pronto para validação final" : preview ? "Pendências encontradas" : loading ? "Analisando arquivo" : "Aguardando arquivo"
@@ -49,7 +69,7 @@ export default function Imports(){
     {error && <div className="errorBox">{error}</div>}
     <div className="importNote"><b>Escopo atual</b><span>Preview, equivalência de colunas, regras mínimas, duplicidade e insert das linhas válidas.</span></div>
     <button className="importAction" disabled={!file || !preview?.valid_rows || loading || committing} onClick={commitFile}>{committing?"Importando":"Importar linhas válidas"}</button>
-    {commit && <div className="importResult"><b>Importação concluída</b><span>{commit.inserted_rows} inseridas · {commit.skipped_duplicate_rows} duplicadas · {commit.invalid_rows} inválidas</span></div>}
+    {commit && <div className="importResult"><b>Importação concluída</b><span>{commit.inserted_rows} inseridas · {commit.skipped_duplicate_rows} duplicadas · {commit.invalid_rows} inválidas</span>{dashboardReady && <><small>Fonte SEJUSP ativada nos filtros globais.</small><button type="button" onClick={openSejuspDashboard}>Abrir dashboard SEJUSP</button></>}</div>}
    </section>
    <section className="panel importPanel"><header><div><b>Resumo do arquivo</b><small>Retorno da API de importação</small></div></header><div className="panelBody importSummary">
     <div className="metricRow"><span>Linhas</span><b>{preview?.total_rows ?? "-"}</b></div>
