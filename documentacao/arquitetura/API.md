@@ -81,7 +81,8 @@ Cabeçalhos canônicos obrigatórios: `id_origem`, `abertura_em`, `municipio` e 
 Cabeçalhos opcionais reconhecidos para persistência normalizada: `grupo`, `subtipo`, `unidade_operacional`, `bairro`, `endereco`, `registro_em`, `codigo_ibge`, `segredo_de_justica`, `latitude`, `longitude`, `codigo_viatura`, `tipo_viatura`, `despacho_em`, `saida_em`, `chegada_em`, `liberacao_em`, `retorno_em` e `disponibilidade_em`.
 Cabeçalhos auxiliares reconhecidos para auditoria/rastreabilidade no preview e preservados em `dados_origem`: `forca`, `movimentacao`, `autoria`, `motivacao`, `uf_origem`, `municipio_origem`, `dia_registro`, `periodo_registro`, `faixa_idade`, `local`, `uf` e `area_municipio`.
 
-Relatórios SEJUSP são aceitos por equivalência automática de cabeçalhos:
+Relatórios SEJUSP são aceitos por equivalência automática de cabeçalhos. O leiaute oficial está documentado em `documentacao/dados/LEIAUTE_IMPORTACAO_SEJUSP.md`.
+
 
 | SEJUSP | FOCO |
 |---|---|
