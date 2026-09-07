@@ -1,6 +1,12 @@
 FROM node:22-alpine
+
 WORKDIR /app
-COPY package.json ./
-RUN npm install
+
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
 COPY . .
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+
+CMD ["pnpm", "run", "dev", "--", "--host", "0.0.0.0"]

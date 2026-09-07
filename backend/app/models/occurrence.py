@@ -21,8 +21,8 @@ class Occurrence(Base):
     available_at: Mapped[datetime | None] = mapped_column("disponibilidade_em", DateTime(timezone=True), nullable=True)
 
     group_name: Mapped[str | None] = mapped_column("grupo", String(120), nullable=True, index=True)
-    type_name: Mapped[str] = mapped_column("tipo", String(180), index=True)
-    subtype_name: Mapped[str | None] = mapped_column("subtipo", String(180), nullable=True, index=True)
+    type_name: Mapped[str] = mapped_column("tipo", String(500), index=True)
+    subtype_name: Mapped[str | None] = mapped_column("subtipo", String(500), nullable=True, index=True)
     priority: Mapped[str | None] = mapped_column("prioridade", String(40), nullable=True, index=True)
 
     municipality: Mapped[str] = mapped_column("municipio", String(160), index=True)

@@ -604,6 +604,16 @@ def _column_mappings(headers: list[str]) -> list[dict]:
     return mappings
 
 
+def _registration_years(records: list[dict]) -> list[int]:
+    years = {
+        date.year
+        for item in records
+        for date in [item["record"].get("_registro_datetime") or item["record"].get("_abertura_datetime")]
+        if date
+    }
+    return sorted(years)
+
+
 def _parsed_import(content: bytes, filename: str) -> dict:
     source_format, headers, source_rows = read_import_rows(content, filename)
     mappings = _column_mappings(headers)
@@ -632,6 +642,7 @@ def _parsed_import(content: bytes, filename: str) -> dict:
         else:
             issues.append({"row": index, "issues": row_issues or ["cabeçalhos obrigatórios ausentes"]})
         records.append({"row": index, "record": record, "issues": row_issues})
+    registration_years = _registration_years(records)
     warnings = []
     if sensitive_rows:
         warnings.append(f"{sensitive_rows} linha(s) com segredo de justiça identificadas")
@@ -650,6 +661,7 @@ def _parsed_import(content: bytes, filename: str) -> dict:
         "can_commit": not missing and not issues,
         "source_format": source_format,
         "source_profile": profile,
+        "registration_years": registration_years,
         "column_mappings": mappings,
         "unmapped_headers": [item["source_header"] for item in mappings if not item["target_field"]],
         "sensitive_rows": sensitive_rows,
@@ -709,6 +721,7 @@ def commit_import(db: Session, content: bytes, filename: str) -> dict:
             "source_format": parsed["source_format"],
             "source_profile": parsed["source_profile"],
             "source_scope": SISTEMA_ORIGEM_SEJUSP if parsed["source_profile"] == "RELATORIO_SEJUSP" else SISTEMA_ORIGEM_FOCO,
+            "registration_years": parsed["registration_years"],
             "total_rows": parsed["total_rows"],
             "inserted_rows": 0,
             "skipped_duplicate_rows": 0,
@@ -768,6 +781,7 @@ def commit_import(db: Session, content: bytes, filename: str) -> dict:
         "source_format": parsed["source_format"],
         "source_profile": parsed["source_profile"],
         "source_scope": sistema_origem,
+        "registration_years": parsed["registration_years"],
         "total_rows": parsed["total_rows"],
         "inserted_rows": inserted,
         "skipped_duplicate_rows": skipped,

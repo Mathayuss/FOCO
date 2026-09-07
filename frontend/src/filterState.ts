@@ -54,15 +54,39 @@ const historicalPeriodLabels: Record<string, string> = {
 }
 
 const importedPeriodLabels: Record<string, string> = {
-  all: "Jan-Jun/2025",
-  jan: "Jan/2025",
-  fev: "Fev/2025",
-  mar: "Mar/2025",
-  abr: "Abr/2025",
-  mai: "Mai/2025",
-  jun: "Jun/2025",
-  q1: "Jan-Mar/2025",
-  q2: "Abr-Jun/2025",
+  all: "Todo período importado",
+}
+
+const importedMonthLabels: Record<string, string> = {
+  "01": "Jan",
+  "02": "Fev",
+  "03": "Mar",
+  "04": "Abr",
+  "05": "Mai",
+  "06": "Jun",
+  "07": "Jul",
+  "08": "Ago",
+  "09": "Set",
+  "10": "Out",
+  "11": "Nov",
+  "12": "Dez",
+}
+
+const importedQuarterLabels: Record<string, string> = {
+  q1: "Jan-Mar",
+  q2: "Abr-Jun",
+  q3: "Jul-Set",
+  q4: "Out-Dez",
+}
+
+function importedDynamicPeriodLabel(period: string) {
+  const yearOnly = period.match(/^ano-(\d{4})$/)
+  if (yearOnly) return yearOnly[1]
+  const month = period.match(/^(\d{4})-(0[1-9]|1[0-2])$/)
+  if (month) return `${importedMonthLabels[month[2]]}/${month[1]}`
+  const quarter = period.match(/^(\d{4})-(q[1-4])$/)
+  if (quarter) return `${importedQuarterLabels[quarter[2]]}/${quarter[1]}`
+  return ""
 }
 
 export function toAnalyticsParams(filters: GlobalFilters): AnalyticsParams {
@@ -94,8 +118,8 @@ export function sourceLabel(source: string) {
 }
 
 export function periodLabel(period: string, source = "historico") {
-  const labels = source === "sejusp" ? importedPeriodLabels : historicalPeriodLabels
-  return labels[period] || period
+  if (source === "sejusp") return importedPeriodLabels[period] || importedDynamicPeriodLabel(period) || period
+  return historicalPeriodLabels[period] || period
 }
 
 export function resetFilterPatch(key: FilterKey): Partial<GlobalFilters> {

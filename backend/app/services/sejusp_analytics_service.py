@@ -57,6 +57,7 @@ def _rows(db: Session) -> list[dict[str, Any]]:
     stmt = (
         select(
             Occurrence.opened_at,
+            Occurrence.registered_at,
             Occurrence.type_name,
             Occurrence.group_name,
             Occurrence.subtype_name,
@@ -71,35 +72,41 @@ def _rows(db: Session) -> list[dict[str, Any]]:
         .outerjoin(Unit, Occurrence.unit_id == Unit.id)
         .where(Occurrence.source == SOURCE_SCOPE)
     )
-    return [
-        {
-            "opened_at": opened_at,
-            "type": type_name,
-            "group": group_name,
-            "subtype": subtype_name,
-            "municipality": municipality,
-            "neighborhood": neighborhood,
-            "lat": latitude,
-            "lon": longitude,
-            "judicial_secret": judicial_secret,
-            "ibge_code": ibge_code,
-            "unit": unit_name,
-            "shift": _shift_for(opened_at),
-        }
-        for (
-            opened_at,
-            type_name,
-            group_name,
-            subtype_name,
-            municipality,
-            neighborhood,
-            latitude,
-            longitude,
-            judicial_secret,
-            ibge_code,
-            unit_name,
-        ) in db.execute(stmt)
-    ]
+    rows = []
+    for (
+        opened_at,
+        registered_at,
+        type_name,
+        group_name,
+        subtype_name,
+        municipality,
+        neighborhood,
+        latitude,
+        longitude,
+        judicial_secret,
+        ibge_code,
+        unit_name,
+    ) in db.execute(stmt):
+        reference_at = registered_at or opened_at
+        rows.append(
+            {
+                "opened_at": opened_at,
+                "registered_at": registered_at,
+                "reference_at": reference_at,
+                "type": type_name,
+                "group": group_name,
+                "subtype": subtype_name,
+                "municipality": municipality,
+                "neighborhood": neighborhood,
+                "lat": latitude,
+                "lon": longitude,
+                "judicial_secret": judicial_secret,
+                "ibge_code": ibge_code,
+                "unit": unit_name,
+                "shift": _shift_for(reference_at),
+            }
+        )
+    return rows
 
 
 def _shift_for(opened_at: datetime | None) -> str | None:
@@ -112,42 +119,59 @@ def _shift_for(opened_at: datetime | None) -> str | None:
     return None
 
 
-def _year_label(years: set[int]) -> str:
-    if not years:
-        return "sem dados"
-    ordered = sorted(years)
-    return str(ordered[0]) if len(ordered) == 1 else f"{ordered[0]}-{ordered[-1]}"
+def _month_label(year: int, month: int) -> str:
+    return f"{MONTH_NAMES[month]}/{year}"
+
+
+def _range_label(pairs: list[tuple[int, int]]) -> str:
+    if not pairs:
+        return "Sem dados"
+    if len(pairs) == 1:
+        year, month = pairs[0]
+        return _month_label(year, month)
+    first_year, first_month = pairs[0]
+    last_year, last_month = pairs[-1]
+    if first_year == last_year:
+        return f"{MONTH_NAMES[first_month]}-{MONTH_NAMES[last_month]}/{first_year}"
+    return f"{_month_label(first_year, first_month)}-{_month_label(last_year, last_month)}"
 
 
 def _period_defs(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    dates = [row["opened_at"] for row in rows if row["opened_at"]]
-    years = {date.year for date in dates}
-    months = sorted({date.month for date in dates})
-    year = _year_label(years)
-    if not months:
-        return {"all": {"label": "Sem dados", "months": [], "month_numbers": []}}
+    dates = [row["reference_at"] for row in rows if row.get("reference_at")]
+    pairs = sorted({(date.year, date.month) for date in dates})
+    if not pairs:
+        return {"all": {"label": "Sem dados", "months": [], "period_keys": []}}
 
-    first, last = months[0], months[-1]
     periods: dict[str, dict[str, Any]] = {
         "all": {
-            "label": f"{MONTH_NAMES[first]}-{MONTH_NAMES[last]}/{year}",
-            "months": [MONTH_NAMES[month] for month in months],
-            "month_numbers": months,
+            "label": _range_label(pairs),
+            "months": [_month_label(year, month) for year, month in pairs],
+            "period_keys": pairs,
         }
     }
-    for month in months:
-        periods[MONTH_KEYS[month]] = {
-            "label": f"{MONTH_NAMES[month]}/{year}",
-            "months": [MONTH_NAMES[month]],
-            "month_numbers": [month],
+    years = sorted({year for year, _month in pairs})
+    for year in years:
+        year_pairs = [pair for pair in pairs if pair[0] == year]
+        year_months = [month for _year, month in year_pairs]
+        periods[f"ano-{year}"] = {
+            "label": str(year),
+            "months": [_month_label(year, month) for month in year_months],
+            "period_keys": year_pairs,
         }
-    for key, quarter_months in QUARTERS.items():
-        present = [month for month in quarter_months if month in months]
-        if present:
-            periods[key] = {
-                "label": f"{MONTH_NAMES[present[0]]}-{MONTH_NAMES[present[-1]]}/{year}",
-                "months": [MONTH_NAMES[month] for month in present],
-                "month_numbers": present,
+        for key, quarter_months in QUARTERS.items():
+            present = [month for month in quarter_months if (year, month) in pairs]
+            if present:
+                quarter_pairs = [(year, month) for month in present]
+                periods[f"{year}-{key}"] = {
+                    "label": _range_label(quarter_pairs),
+                    "months": [_month_label(year, month) for month in present],
+                    "period_keys": quarter_pairs,
+                }
+        for month in year_months:
+            periods[f"{year}-{month:02d}"] = {
+                "label": _month_label(year, month),
+                "months": [_month_label(year, month)],
+                "period_keys": [(year, month)],
             }
     return periods
 
@@ -206,6 +230,13 @@ def _period(rows: list[dict[str, Any]], period: str | None) -> dict[str, Any]:
     return periods.get(period or "all", periods["all"])
 
 
+def _row_period_pair(row: dict[str, Any]) -> tuple[int, int] | None:
+    reference_at = row.get("reference_at")
+    if not reference_at:
+        return None
+    return reference_at.year, reference_at.month
+
+
 def _filtered_rows(
     rows: list[dict[str, Any]],
     period: str | None = None,
@@ -215,11 +246,10 @@ def _filtered_rows(
     subtype: str | None = None,
     shift: str | None = None,
 ) -> list[dict[str, Any]]:
-    selected_months = set(_period(rows, period)["month_numbers"])
+    selected_pairs = set(_period(rows, period)["period_keys"])
     filtered = []
     for row in rows:
-        opened_at = row["opened_at"]
-        if selected_months and opened_at and opened_at.month not in selected_months:
+        if selected_pairs and _row_period_pair(row) not in selected_pairs:
             continue
         if type_name and row["type"] != type_name:
             continue
@@ -245,7 +275,7 @@ def _metric_items(rows: list[dict[str, Any]], field: str, total: int | None = No
 
 
 def _date_count(rows: list[dict[str, Any]]) -> int:
-    dates = {row["opened_at"].date() for row in rows if row.get("opened_at")}
+    dates = {row["reference_at"].date() for row in rows if row.get("reference_at")}
     return len(dates)
 
 
@@ -298,7 +328,7 @@ def filter_metadata(
             "types": len(_sorted_unique(row["type"] for row in rows)),
             "municipalities": len(_sorted_unique(row["municipality"] for row in rows)),
             "units": len(_sorted_unique(row["unit"] for row in rows)),
-            "hours": len({row["opened_at"].hour for row in filtered if row.get("opened_at")}),
+            "hours": len({row["reference_at"].hour for row in filtered if row.get("reference_at")}),
             "type_distribution_scope": "linhas_importadas",
             "partial_type_series": False,
             "missing_type_months": [],
@@ -360,13 +390,12 @@ def monthly(
 ) -> dict[str, Any]:
     rows = _rows(db)
     filtered = _filtered_rows(rows, period, type_name, municipality, unit, subtype, shift)
-    selected_months = _period(rows, period)["month_numbers"]
-    months = selected_months or sorted({row["opened_at"].month for row in rows if row.get("opened_at")})
+    pairs = _period(rows, period)["period_keys"]
     items = []
-    for month in months:
-        month_rows = [row for row in filtered if row.get("opened_at") and row["opened_at"].month == month]
+    for year, month in pairs:
+        month_rows = [row for row in filtered if _row_period_pair(row) == (year, month)]
         total = len(month_rows)
-        items.append({"mes": MONTH_NAMES[month], "total": total, "tip": _metric_items(month_rows, "type", total)[:8]})
+        items.append({"mes": _month_label(year, month), "total": total, "tip": _metric_items(month_rows, "type", total)[:8]})
     return {
         "items": items,
         "comparison": [],
@@ -412,9 +441,9 @@ def hours(db: Session, **filters: str | None) -> dict[str, Any]:
     filtered = _filtered_rows(_rows(db), **filters)
     counts = [0] * 24
     for row in filtered:
-        opened_at = row.get("opened_at")
-        if opened_at:
-            counts[opened_at.hour] += 1
+        reference_at = row.get("reference_at")
+        if reference_at:
+            counts[reference_at.hour] += 1
     return {"items": counts, "source_scope": SOURCE_LABEL, **filter_metadata(db, **filters)}
 
 

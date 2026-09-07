@@ -2,6 +2,10 @@ from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 
 COLUNAS_OCORRENCIA_INCREMENTAIS = {
+    "subtipo": {
+        "sqlite": "VARCHAR(500)",
+        "postgresql": "VARCHAR(500)",
+    },
     "registro_em": {
         "sqlite": "DATETIME",
         "postgresql": "TIMESTAMP WITH TIME ZONE",

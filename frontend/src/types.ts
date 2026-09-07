@@ -25,6 +25,7 @@ export type CsvPreview = {
   can_commit:boolean
   source_format:string
   source_profile:string
+  registration_years:number[]
   column_mappings:ColumnMapping[]
   unmapped_headers:string[]
   sensitive_rows:number
@@ -37,6 +38,7 @@ export type ImportCommit = {
   source_format:string
   source_profile:string
   source_scope:string
+  registration_years:number[]
   total_rows:number
   inserted_rows:number
   skipped_duplicate_rows:number

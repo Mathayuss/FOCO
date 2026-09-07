@@ -7,6 +7,10 @@ const pct=(part:number,total:number)=>total?`${Math.round(part/total*100)}%`:"0%
 const MAX_IMPORT_UPLOAD_MB=512
 const MAX_IMPORT_UPLOAD_BYTES=MAX_IMPORT_UPLOAD_MB*1024*1024
 const SEJUSP_DASHBOARD_FILTERS = {source:"sejusp",period:"all",type:"",municipality:"",unit:"",subtype:"",shift:""}
+const yearList=(years?:number[])=>years?.length?years.join(", "):"-"
+const dashboardPeriod=(years?:number[])=>years?.length===1?`ano-${years[0]}`:"all"
+const dashboardFilters=(years?:number[])=>({...SEJUSP_DASHBOARD_FILTERS,period:dashboardPeriod(years)})
+const dashboardScope=(years?:number[])=>years?.length===1?`no ano ${years[0]}`:"no período importado"
 
 type ImportsProps = {
  setGlobalFilters: SetGlobalFilters
@@ -42,7 +46,7 @@ export default function Imports({setGlobalFilters,onShowDashboard}:ImportsProps)
    const result = await api.commitImport(file)
    setCommit(result)
    if(result.source_scope==="RELATORIO_SEJUSP" && (result.inserted_rows>0 || result.skipped_duplicate_rows>0)){
-    setGlobalFilters(SEJUSP_DASHBOARD_FILTERS)
+    setGlobalFilters(dashboardFilters(result.registration_years))
     setDashboardReady(true)
    }
   }
@@ -51,7 +55,7 @@ export default function Imports({setGlobalFilters,onShowDashboard}:ImportsProps)
  }
 
  function openSejuspDashboard(){
-  setGlobalFilters(SEJUSP_DASHBOARD_FILTERS)
+  setGlobalFilters(dashboardFilters(commit?.registration_years))
   onShowDashboard()
  }
 
@@ -69,7 +73,7 @@ export default function Imports({setGlobalFilters,onShowDashboard}:ImportsProps)
     {error && <div className="errorBox">{error}</div>}
     <div className="importNote"><b>Escopo atual</b><span>Preview, equivalência de colunas, regras mínimas, duplicidade e insert das linhas válidas.</span></div>
     <button className="importAction" disabled={!file || !preview?.valid_rows || loading || committing} onClick={commitFile}>{committing?"Importando":"Importar linhas válidas"}</button>
-    {commit && <div className="importResult"><b>Importação concluída</b><span>{commit.inserted_rows} inseridas · {commit.skipped_duplicate_rows} duplicadas · {commit.invalid_rows} inválidas</span>{dashboardReady && <><small>Fonte SEJUSP ativada nos filtros globais.</small><button type="button" onClick={openSejuspDashboard}>Abrir dashboard SEJUSP</button></>}</div>}
+    {commit && <div className="importResult"><b>Importação concluída</b><span>{commit.inserted_rows} inseridas · {commit.skipped_duplicate_rows} duplicadas · {commit.invalid_rows} inválidas</span>{dashboardReady && <><small>Fonte SEJUSP ativada {dashboardScope(commit.registration_years)}.</small><button type="button" onClick={openSejuspDashboard}>Abrir dashboard SEJUSP</button></>}</div>}
    </section>
    <section className="panel importPanel"><header><div><b>Resumo do arquivo</b><small>Retorno da API de importação</small></div></header><div className="panelBody importSummary">
     <div className="metricRow"><span>Linhas</span><b>{preview?.total_rows ?? "-"}</b></div>
@@ -77,6 +81,7 @@ export default function Imports({setGlobalFilters,onShowDashboard}:ImportsProps)
     <div className="metricRow bad"><span>Inválidas</span><b>{preview ? `${preview.invalid_rows} · ${pct(preview.invalid_rows, preview.total_rows)}` : "-"}</b></div>
     <div className="metricRow"><span>Colunas reconhecidas</span><b>{preview?.recognized_headers.length ?? "-"}</b></div>
     <div className="metricRow"><span>Perfil</span><b>{preview?.source_profile?.replace("RELATORIO_","") ?? "-"}</b></div>
+    <div className="metricRow"><span>Ano do registro</span><b>{yearList(preview?.registration_years)}</b></div>
     <div className="metricRow"><span>Sigilo</span><b>{preview?.sensitive_rows ?? "-"}</b></div>
     <div className="metricRow"><span>Sem coordenada</span><b>{preview?.missing_coordinate_rows ?? "-"}</b></div>
    </div></section>

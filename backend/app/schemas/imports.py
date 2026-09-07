@@ -21,6 +21,7 @@ class CsvPreviewResponse(BaseModel):
     can_commit: bool
     source_format: str = "csv"
     source_profile: str = "FOCO"
+    registration_years: list[int] = Field(default_factory=list)
     column_mappings: list[ColumnMapping] = Field(default_factory=list)
     unmapped_headers: list[str] = Field(default_factory=list)
     sensitive_rows: int = 0
@@ -32,6 +33,7 @@ class ImportCommitResponse(BaseModel):
     source_format: str
     source_profile: str
     source_scope: str
+    registration_years: list[int] = Field(default_factory=list)
     total_rows: int
     inserted_rows: int
     skipped_duplicate_rows: int

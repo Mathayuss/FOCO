@@ -105,7 +105,7 @@ def test_product_identity():
         root = client.get("/").json()
         health = client.get("/api/v1/health").json()
         assert root["name"].startswith("FOCO API")
-        assert root["version"] == "0.2.0"
+        assert root["version"] == "0.3.1"
         assert health["service"] == "foco-api"
 
 
@@ -464,7 +464,7 @@ def test_analytics_sejusp_source_applies_cross_filters():
 
             params = {
                 "source": "sejusp",
-                "period": "jan",
+                "period": "2025-01",
                 "type": type_name,
                 "municipality": municipality,
                 "unit": unit_name,
@@ -488,6 +488,49 @@ def test_analytics_sejusp_source_applies_cross_filters():
         assert hours["items"][14] == 1
     finally:
         _cleanup_imported_test_data([source_id], [unit_name])
+
+def test_sejusp_analytics_uses_registration_date_year_instead_of_filename():
+    source_id = f"ANO-REG-{uuid4()}/2025"
+    unit_name = f"UNIDADE ANO REGISTRO {uuid4()}"
+    type_name = f"TIPO ANO REGISTRO {uuid4()}"
+    municipality = f"Municipio Ano Registro {uuid4()}"
+    content = (
+        "Nº/ANO,DATA DO REGISTRO,HORA DO REGISTRO,DATA DO FATO,HORA DO FATO,FATO,UNIDADE DE ORIGEM,MUNICÍPIO\n"
+        f"{source_id},03/08/2026,19:15,31/12/2025,23:50,{type_name},{unit_name},{municipality}\n"
+    ).encode("utf-8")
+
+    try:
+        with TestClient(app) as client:
+            preview = client.post(
+                "/api/v1/imports/preview",
+                files={"file": ("relatorio_2025.csv", content, "text/csv")},
+            ).json()
+            commit = client.post(
+                "/api/v1/imports",
+                files={"file": ("relatorio_2025.csv", content, "text/csv")},
+            ).json()
+            filters = client.get("/api/v1/analytics/filters", params={"source": "sejusp"}).json()
+            params = {"source": "sejusp", "period": "2026-08", "type": type_name, "municipality": municipality}
+            overview = client.get("/api/v1/analytics/overview", params=params).json()
+            monthly = client.get("/api/v1/analytics/monthly", params=params).json()
+            hours = client.get("/api/v1/analytics/hours", params=params).json()
+
+        period_by_key = {item["key"]: item for item in filters["periods"]}
+        assert preview["registration_years"] == [2026]
+        assert commit["registration_years"] == [2026]
+        assert commit["inserted_rows"] == 1
+        assert "ano-2026" in period_by_key
+        assert period_by_key["2026-08"]["label"] == "Ago/2026"
+        assert overview["total"] == 1
+        assert overview["applied_filters"]["period"] == "Ago/2026"
+        assert overview["coverage"]["months"] == ["Ago/2026"]
+        assert [item["mes"] for item in monthly["items"]] == ["Ago/2026"]
+        assert monthly["items"][0]["total"] == 1
+        assert hours["items"][19] == 1
+        assert hours["items"][23] == 0
+    finally:
+        _cleanup_imported_test_data([source_id], [unit_name])
+
 
 def test_analytics_period_filter_recalculates_overview():
     with TestClient(app) as client:

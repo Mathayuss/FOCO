@@ -1,43 +1,48 @@
 services:
-  db:
-    image: postgres:16-alpine
+  bd:
+    image: postgis/postgis:16-3.4
     environment:
-      POSTGRES_USER: observatorio
-      POSTGRES_PASSWORD: observatorio
-      POSTGRES_DB: observatorio
+      POSTGRES_USER: ${BD_USUARIO:-foco}
+      POSTGRES_PASSWORD: ${BD_SENHA:-foco_desenvolvimento}
+      POSTGRES_DB: ${BD_NOME:-foco_ocorrencias}
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - dados_postgis:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U observatorio -d observatorio"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${BD_USUARIO:-foco} -d ${BD_NOME:-foco_ocorrencias}"
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
 
-  backend:
+  servidor:
     build: ./backend
     env_file:
       - .env
     depends_on:
-      db:
+      bd:
         condition: service_healthy
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
 
-  frontend:
+  interface:
     build: ./frontend
     environment:
-      VITE_API_URL: http://localhost:8000/api/v1
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api/v1}
     depends_on:
-      - backend
+      - servidor
     ports:
       - "5173:5173"
     volumes:
       - ./frontend:/app
-    command: npm run dev -- --host 0.0.0.0
+      - /app/node_modules
+    command: pnpm run dev --host 0.0.0.0
 
 volumes:
-  pgdata:
+  dados_postgis:

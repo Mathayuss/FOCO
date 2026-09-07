@@ -62,3 +62,4 @@ Nº/ANO | FORÇA | MOVIMENTAÇÃO | SEGREDO DE JUSTIÇA | FATO | FATO AGRUPADO |
 - Registros sem campos obrigatórios são rejeitados e retornados em `issues`.
 - Coordenadas ausentes não bloqueiam importação; coordenadas inválidas reduzem `pontuacao_qualidade`.
 - Linhas com `SEGREDO DE JUSTIÇA=Sim` recebem `segredo_de_justica=true` e prioridade `sigilo_judicial`.
+- O ano, os períodos, a série mensal, hora e turno dos dashboards SEJUSP são calculados por `DATA DO REGISTRO` + `HORA DO REGISTRO`; o nome do arquivo não define o ano analítico. Quando `registro_em` estiver ausente, o sistema usa `DATA DO FATO` apenas como fallback técnico.
