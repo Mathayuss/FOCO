@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.models.occurrence import Occurrence
 from app.models.unit import Unit
+from app.services import sejusp_analytics_service
 
 LOCAL_TZ = ZoneInfo("America/Campo_Grande")
 EXCEL_EPOCH = datetime(1899, 12, 30, tzinfo=LOCAL_TZ)
@@ -776,6 +777,8 @@ def commit_import(db: Session, content: bytes, filename: str) -> dict:
         inserted += 1
         seen_inserted.add(source_id)
     db.commit()
+    if inserted and sistema_origem == SISTEMA_ORIGEM_SEJUSP:
+        sejusp_analytics_service.clear_cache()
     invalid_rows = parsed["total_rows"] - len(valid_records)
     return {
         "source_format": parsed["source_format"],

@@ -1,8 +1,10 @@
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from datetime import datetime
+from threading import Lock
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.occurrence import Occurrence
@@ -53,7 +55,48 @@ SHIFT_RANGES = {
 }
 
 
-def _rows(db: Session) -> list[dict[str, Any]]:
+@dataclass(frozen=True)
+class _DatasetSignature:
+    database_url: str
+    total: int
+    ultimo_id: int | None
+    ultima_importacao: datetime | None
+
+
+_CACHE_LOCK = Lock()
+_CACHE_SIGNATURE: _DatasetSignature | None = None
+_CACHE_ROWS: list[dict[str, Any]] | None = None
+
+
+def clear_cache() -> None:
+    global _CACHE_SIGNATURE, _CACHE_ROWS
+    with _CACHE_LOCK:
+        _CACHE_SIGNATURE = None
+        _CACHE_ROWS = None
+
+
+def _database_key(db: Session) -> str:
+    bind = db.get_bind()
+    return bind.url.render_as_string(hide_password=True) if bind is not None else "desconhecido"
+
+
+def _dataset_signature(db: Session) -> _DatasetSignature:
+    total, ultimo_id, ultima_importacao = db.execute(
+        select(
+            func.count(Occurrence.id),
+            func.max(Occurrence.id),
+            func.max(Occurrence.imported_at),
+        ).where(Occurrence.source == SOURCE_SCOPE)
+    ).one()
+    return _DatasetSignature(
+        database_url=_database_key(db),
+        total=int(total or 0),
+        ultimo_id=ultimo_id,
+        ultima_importacao=ultima_importacao,
+    )
+
+
+def _load_rows(db: Session) -> list[dict[str, Any]]:
     stmt = (
         select(
             Occurrence.opened_at,
@@ -107,6 +150,21 @@ def _rows(db: Session) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+def _rows(db: Session) -> list[dict[str, Any]]:
+    global _CACHE_SIGNATURE, _CACHE_ROWS
+
+    signature = _dataset_signature(db)
+    with _CACHE_LOCK:
+        if _CACHE_SIGNATURE == signature and _CACHE_ROWS is not None:
+            return list(_CACHE_ROWS)
+
+    rows = _load_rows(db)
+    with _CACHE_LOCK:
+        _CACHE_SIGNATURE = signature
+        _CACHE_ROWS = rows
+    return list(rows)
 
 
 def _shift_for(opened_at: datetime | None) -> str | None:

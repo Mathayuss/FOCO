@@ -12,6 +12,7 @@ from app.db.session import SessionLocal
 from app.models.occurrence import Occurrence, OccurrenceVehicle
 from app.models.unit import Unit
 from app.models.vehicle import Vehicle
+from app.services import sejusp_analytics_service
 
 
 def _xlsx_bytes(headers: list[str], rows: list[list[str]]) -> bytes:
@@ -367,7 +368,15 @@ def test_import_preview_accepts_sejusp_xlsx_report_headers():
     assert "abertura_em" in data["recognized_headers"]
 
 
-def test_import_commit_inserts_sejusp_rows_with_equivalent_fields():
+def test_import_commit_inserts_sejusp_rows_with_equivalent_fields(monkeypatch):
+    cache_clears = 0
+
+    def fake_clear_cache():
+        nonlocal cache_clears
+        cache_clears += 1
+
+    monkeypatch.setattr(sejusp_analytics_service, "clear_cache", fake_clear_cache)
+
     source_id = f"{uuid4()}/2025 9º GBM"
     unit_name = f"9º GBM TESTE {uuid4()}"
     content = (
@@ -394,6 +403,7 @@ def test_import_commit_inserts_sejusp_rows_with_equivalent_fields():
         assert first["source_scope"] == "RELATORIO_SEJUSP"
         assert second["inserted_rows"] == 0
         assert second["skipped_duplicate_rows"] == 1
+        assert cache_clears == 1
 
         db = SessionLocal()
         try:
