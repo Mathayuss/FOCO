@@ -8,7 +8,7 @@ class Vehicle(Base):
     id: Mapped[int] = mapped_column("id_viatura", primary_key=True)
     code: Mapped[str] = mapped_column("codigo", String(60), unique=True, index=True)
     vehicle_type: Mapped[str] = mapped_column("tipo_viatura", String(60), index=True)
-    unit_id: Mapped[int | None] = mapped_column("id_unidade_operacional", ForeignKey("unidade_operacional.id_unidade_operacional"), nullable=True)
+    unit_id: Mapped[int | None] = mapped_column("id_unidade_operacional", ForeignKey("unidade_operacional.id_unidade_operacional"), nullable=True, index=True)
     active: Mapped[bool] = mapped_column("ativo", default=True)
 
     unit = relationship("Unit", back_populates="vehicles")

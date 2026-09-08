@@ -31,7 +31,7 @@ class Occurrence(Base):
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    unit_id: Mapped[int | None] = mapped_column("id_unidade_operacional", ForeignKey("unidade_operacional.id_unidade_operacional"), nullable=True)
+    unit_id: Mapped[int | None] = mapped_column("id_unidade_operacional", ForeignKey("unidade_operacional.id_unidade_operacional"), nullable=True, index=True)
     status: Mapped[str] = mapped_column("situacao", String(40), default="fechada", index=True)
     quality_score: Mapped[float | None] = mapped_column("pontuacao_qualidade", Float, nullable=True)
     registered_at: Mapped[datetime | None] = mapped_column("registro_em", DateTime(timezone=True), nullable=True)
