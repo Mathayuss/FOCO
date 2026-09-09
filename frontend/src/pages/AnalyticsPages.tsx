@@ -26,7 +26,7 @@ function useSnapshot(params:AnalyticsParams={}){
  useEffect(()=>{
   let alive=true
   setState(prev=>({...prev,loading:true,error:""}))
-  Promise.all([api.filters({source:params.source}),api.overview(params),api.sla(),api.monthly(params),api.types(params),api.cities(params),api.hours(params),api.units(params),api.shifts(params)])
+  Promise.all([api.filters(params),api.overview(params),api.sla(),api.monthly(params),api.types(params),api.cities(params),api.hours(params),api.units(params),api.shifts(params)])
    .then(([filters,overview,sla,monthly,types,cities,hours,units,shifts])=>{if(alive)setState({loading:false,error:"",filters,overview,sla,monthly:monthly.items,comparison:monthly.comparison,types,cities,hours,units,shifts})})
    .catch((err)=>{if(alive)setState(prev=>({...prev,loading:false,error:err instanceof ApiError ? err.message : "Não foi possível acessar a API. Verifique se o backend está ativo."}))})
   return ()=>{alive=false}

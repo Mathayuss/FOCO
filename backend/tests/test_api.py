@@ -571,16 +571,22 @@ def test_legacy_sejusp_occurrences_receive_import_batch():
 
 def test_analytics_sejusp_source_applies_cross_filters():
     source_id = f"ANALYTICS-{uuid4()}"
+    source_id_outro = f"ANALYTICS-OUTRO-{uuid4()}"
     unit_name = f"UNIDADE ANALYTICS {uuid4()}"
+    other_unit_name = f"UNIDADE ANALYTICS OUTRA {uuid4()}"
     type_name = f"TIPO ANALYTICS {uuid4()}"
+    other_type_name = f"TIPO ANALYTICS OUTRO {uuid4()}"
     subtype_name = f"SUBTIPO ANALYTICS {uuid4()}"
+    other_subtype_name = f"SUBTIPO ANALYTICS OUTRO {uuid4()}"
     municipality = f"Municipio Analytics {uuid4()}"
+    other_municipality = f"Municipio Analytics Outro {uuid4()}"
     db = SessionLocal()
     try:
         unit = Unit(name=unit_name, command="TESTE", active=True)
-        db.add(unit)
+        other_unit = Unit(name=other_unit_name, command="TESTE", active=True)
+        db.add_all([unit, other_unit])
         db.flush()
-        db.add(
+        db.add_all([
             Occurrence(
                 source="RELATORIO_SEJUSP",
                 source_id=source_id,
@@ -595,8 +601,23 @@ def test_analytics_sejusp_source_applies_cross_filters():
                 unit_id=unit.id,
                 status="importada",
                 judicial_secret=False,
-            )
-        )
+            ),
+            Occurrence(
+                source="RELATORIO_SEJUSP",
+                source_id=source_id_outro,
+                opened_at=datetime(2025, 1, 16, 8, 30, tzinfo=timezone.utc),
+                type_name=other_type_name,
+                group_name="GRUPO ANALYTICS",
+                subtype_name=other_subtype_name,
+                municipality=other_municipality,
+                neighborhood="Centro",
+                latitude=-21.45,
+                longitude=-55.62,
+                unit_id=other_unit.id,
+                status="importada",
+                judicial_secret=False,
+            ),
+        ])
         db.commit()
     finally:
         db.close()
@@ -610,6 +631,15 @@ def test_analytics_sejusp_source_applies_cross_filters():
             assert municipality in filters["municipalities"]
             assert unit_name in filters["units"]
             assert subtype_name in filters["subtypes"]
+
+            scoped_filters = client.get("/api/v1/analytics/filters", params={"source": "sejusp", "municipality": municipality}).json()
+            assert type_name in scoped_filters["types"]
+            assert other_type_name not in scoped_filters["types"]
+            assert unit_name in scoped_filters["units"]
+            assert other_unit_name not in scoped_filters["units"]
+            assert subtype_name in scoped_filters["subtypes"]
+            assert other_subtype_name not in scoped_filters["subtypes"]
+            assert {"Madrugada", "Manhã", "Tarde", "Noite"}.issuperset(scoped_filters["shifts"])
 
             params = {
                 "source": "sejusp",
@@ -636,7 +666,7 @@ def test_analytics_sejusp_source_applies_cross_filters():
         assert cities["items"][0]["total"] == 1
         assert hours["items"][14] == 1
     finally:
-        _cleanup_imported_test_data([source_id], [unit_name])
+        _cleanup_imported_test_data([source_id, source_id_outro], [unit_name, other_unit_name])
 
 def test_sejusp_analytics_uses_registration_date_year_instead_of_filename():
     source_id = f"ANO-REG-{uuid4()}/2025"

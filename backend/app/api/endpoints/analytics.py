@@ -116,6 +116,12 @@ def shifts(params: dict = Depends(filters)):
 
 @router.get("/filters")
 def available_filters(
+    period: str | None = Query(default="all"),
+    type: str | None = Query(default=None),
+    municipality: str | None = Query(default=None),
+    unit: str | None = Query(default=None),
+    subtype: str | None = Query(default=None),
+    shift: str | None = Query(default=None),
     source: str | None = Query(default="historico"),
     fonte: str | None = Query(default=None),
     db: Session = Depends(get_db),
@@ -124,9 +130,36 @@ def available_filters(
     if source_key not in VALID_SOURCES:
         raise _invalid_source(source_key)
     if source_key == "sejusp":
-        values = sejusp_analytics_service.available_filter_values(db)
+        errors = sejusp_analytics_service.validate_filter_params(
+            db,
+            period=period,
+            type_name=type,
+            municipality=municipality,
+            unit=unit,
+            subtype=subtype,
+            shift=shift,
+        )
+        if errors:
+            raise HTTPException(status_code=400, detail={"code": "INVALID_FILTER", "errors": errors})
+        values = sejusp_analytics_service.available_filter_values(
+            db,
+            period=period,
+            type_name=type,
+            municipality=municipality,
+            unit=unit,
+            subtype=subtype,
+            shift=shift,
+        )
         return {
-            "periods": sejusp_analytics_service.period_options(db),
+            "periods": sejusp_analytics_service.period_options(
+                db,
+                period=period,
+                type_name=type,
+                municipality=municipality,
+                unit=unit,
+                subtype=subtype,
+                shift=shift,
+            ),
             "types": values["types"],
             "municipalities": values["municipalities"],
             "units": values["units"],
@@ -137,6 +170,16 @@ def available_filters(
             "source_scope": "sejusp_importado",
             "sources": SOURCE_OPTIONS,
         }
+    errors = historical_service.validate_filter_params(
+        period=period,
+        type_name=type,
+        municipality=municipality,
+        unit=unit,
+        subtype=subtype,
+        shift=shift,
+    )
+    if errors:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_FILTER", "errors": errors})
     values = historical_service.available_filter_values()
     return {
         "periods": historical_service.period_options(),

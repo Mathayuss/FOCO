@@ -234,23 +234,64 @@ def _period_defs(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return periods
 
 
-def period_options(db: Session) -> list[dict[str, Any]]:
+def period_options(
+    db: Session,
+    period: str | None = None,
+    type_name: str | None = None,
+    municipality: str | None = None,
+    unit: str | None = None,
+    subtype: str | None = None,
+    shift: str | None = None,
+) -> list[dict[str, Any]]:
+    rows = _rows(db)
+    if any([period, type_name, municipality, unit, subtype, shift]):
+        rows = _filtered_rows(rows, **_filter_args_without("period", period, type_name, municipality, unit, subtype, shift))
     return [
         {"key": key, "label": value["label"], "months": value["months"]}
-        for key, value in _period_defs(_rows(db)).items()
+        for key, value in _period_defs(rows).items()
     ]
 
 
-def available_filter_values(db: Session) -> dict[str, list[str]]:
+def _filter_args_without(excluded: str, period: str | None, type_name: str | None, municipality: str | None, unit: str | None, subtype: str | None, shift: str | None) -> dict[str, str | None]:
+    return {
+        "period": None if excluded == "period" else period,
+        "type_name": None if excluded == "type" else type_name,
+        "municipality": None if excluded == "municipality" else municipality,
+        "unit": None if excluded == "unit" else unit,
+        "subtype": None if excluded == "subtype" else subtype,
+        "shift": None if excluded == "shift" else shift,
+    }
+
+
+def _shift_options(rows: list[dict[str, Any]]) -> list[str]:
+    present = {row["shift"] for row in rows if row.get("shift")}
+    return [name for name in SHIFT_RANGES if name in present]
+
+
+def available_filter_values(
+    db: Session,
+    period: str | None = None,
+    type_name: str | None = None,
+    municipality: str | None = None,
+    unit: str | None = None,
+    subtype: str | None = None,
+    shift: str | None = None,
+) -> dict[str, list[str]]:
     rows = _rows(db)
-    periods = _period_defs(rows)
+    period_rows = _filtered_rows(rows, **_filter_args_without("period", period, type_name, municipality, unit, subtype, shift))
+    type_rows = _filtered_rows(rows, **_filter_args_without("type", period, type_name, municipality, unit, subtype, shift))
+    municipality_rows = _filtered_rows(rows, **_filter_args_without("municipality", period, type_name, municipality, unit, subtype, shift))
+    unit_rows = _filtered_rows(rows, **_filter_args_without("unit", period, type_name, municipality, unit, subtype, shift))
+    subtype_rows = _filtered_rows(rows, **_filter_args_without("subtype", period, type_name, municipality, unit, subtype, shift))
+    shift_rows = _filtered_rows(rows, **_filter_args_without("shift", period, type_name, municipality, unit, subtype, shift))
+    periods = _period_defs(period_rows)
     return {
         "periods": list(periods),
-        "types": _sorted_unique(row["type"] for row in rows),
-        "municipalities": _sorted_unique(row["municipality"] for row in rows),
-        "units": _sorted_unique(row["unit"] for row in rows),
-        "subtypes": _sorted_unique(row["subtype"] for row in rows),
-        "shifts": list(SHIFT_RANGES),
+        "types": _sorted_unique(row["type"] for row in type_rows),
+        "municipalities": _sorted_unique(row["municipality"] for row in municipality_rows),
+        "units": _sorted_unique(row["unit"] for row in unit_rows),
+        "subtypes": _sorted_unique(row["subtype"] for row in subtype_rows),
+        "shifts": _shift_options(shift_rows),
     }
 
 
@@ -263,14 +304,15 @@ def validate_filter_params(
     subtype: str | None = None,
     shift: str | None = None,
 ) -> list[dict[str, Any]]:
-    values = available_filter_values(db)
+    rows = _rows(db)
+    periods = _period_defs(rows)
     checks = {
-        "period": (period, values["periods"]),
-        "type": (type_name, values["types"]),
-        "municipality": (municipality, values["municipalities"]),
-        "unit": (unit, values["units"]),
-        "subtype": (subtype, values["subtypes"]),
-        "shift": (shift, values["shifts"]),
+        "period": (period, list(periods)),
+        "type": (type_name, _sorted_unique(row["type"] for row in rows)),
+        "municipality": (municipality, _sorted_unique(row["municipality"] for row in rows)),
+        "unit": (unit, _sorted_unique(row["unit"] for row in rows)),
+        "subtype": (subtype, _sorted_unique(row["subtype"] for row in rows)),
+        "shift": (shift, list(SHIFT_RANGES)),
     }
     return [
         {"field": field, "value": value, "allowed": allowed}

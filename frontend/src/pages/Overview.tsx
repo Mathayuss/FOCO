@@ -27,7 +27,7 @@ export default function Overview({globalFilters,setGlobalFilters,clearGlobalFilt
  const [error,setError]=useState("")
  const {source,period,type:typeFilter,municipality,unit,subtype,shift}=globalFilters
  const params=useMemo(()=>toAnalyticsParams(globalFilters),[source,period,typeFilter,municipality,unit,subtype,shift])
- useEffect(()=>{api.filters({source}).then(setFilters).catch(()=>{})},[source])
+ useEffect(()=>{api.filters(params).then(setFilters).catch(()=>{})},[params])
  useEffect(()=>{
   setLoading(true); setError("")
   Promise.all([api.overview(params),api.sla(),api.monthly(params),api.types(params),api.cities(params),api.hours(params),api.units(params)])
