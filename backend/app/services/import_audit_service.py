@@ -1,10 +1,12 @@
 import json
+from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.models.import_batch import ImportBatch, RejectedImportLine
+from app.models.occurrence import Occurrence
 
 
 def _json_list(value: str | None) -> list[str]:
@@ -99,3 +101,43 @@ def list_rejected_lines(db: Session, batch_id: int, limite: int = 50, deslocamen
         .offset(deslocamento)
     ).all()
     return {"items": [_rejected_item(row) for row in rows], "total": total, "limite": limite, "deslocamento": deslocamento}
+
+
+def ensure_legacy_import_batches(db: Session) -> None:
+    total = db.scalar(
+        select(func.count(Occurrence.id)).where(
+            Occurrence.source == "RELATORIO_SEJUSP",
+            Occurrence.import_batch_id.is_(None),
+        )
+    ) or 0
+    if not total:
+        return
+
+    now = datetime.now(timezone.utc)
+    batch = ImportBatch(
+        filename="importacao-legada-sejusp",
+        file_hash="legado".ljust(64, "0"),
+        file_format="desconhecido",
+        source_profile="RELATORIO_SEJUSP",
+        source_system="RELATORIO_SEJUSP",
+        total_rows=total,
+        valid_rows=total,
+        invalid_rows=0,
+        inserted_rows=total,
+        duplicate_rows=0,
+        sensitive_rows=0,
+        invalid_coordinate_rows=0,
+        missing_coordinate_rows=0,
+        status="legado",
+        warnings=json.dumps(["Lote criado automaticamente para ocorrências anteriores à rastreabilidade por lote."], ensure_ascii=False, separators=(",", ":")),
+        started_at=now,
+        finished_at=now,
+    )
+    db.add(batch)
+    db.flush()
+    db.execute(
+        update(Occurrence)
+        .where(Occurrence.source == "RELATORIO_SEJUSP", Occurrence.import_batch_id.is_(None))
+        .values(import_batch_id=batch.id)
+    )
+    db.commit()

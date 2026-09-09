@@ -25,6 +25,8 @@ A migração `20260908_0002_lote_importacao.py` adiciona rastreabilidade de impo
 - `linha_importacao_rejeitada`
 - `ocorrencia.id_lote_importacao`
 
+A migração `20260908_0003_lote_legado_sejusp.py` cria um lote legado para ocorrências SEJUSP já existentes que ainda não possuíam `id_lote_importacao`.
+
 ## Passo 1 — aplicar a migração
 
 ```bash

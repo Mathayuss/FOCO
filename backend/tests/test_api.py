@@ -14,7 +14,7 @@ from app.models.import_batch import ImportBatch, RejectedImportLine
 from app.models.occurrence import Occurrence, OccurrenceVehicle
 from app.models.unit import Unit
 from app.models.vehicle import Vehicle
-from app.services import sejusp_analytics_service
+from app.services import import_audit_service, sejusp_analytics_service
 
 
 def _xlsx_bytes(headers: list[str], rows: list[list[str]]) -> bytes:
@@ -533,6 +533,40 @@ def test_import_commit_persists_batch_and_rejected_rows():
     finally:
         batch_ids = [result["id_lote_importacao"]] if result else []
         _cleanup_imported_test_data([source_id], [], batch_ids)
+
+
+def test_legacy_sejusp_occurrences_receive_import_batch():
+    source_id = f"LEGADO-{uuid4()}"
+    db = SessionLocal()
+    batch_id = None
+    try:
+        db.add(
+            Occurrence(
+                source="RELATORIO_SEJUSP",
+                source_id=source_id,
+                opened_at=datetime(2025, 2, 1, 8, 20, tzinfo=timezone.utc),
+                registered_at=datetime(2025, 2, 1, 8, 10, tzinfo=timezone.utc),
+                type_name="REMOCAO AO PS",
+                municipality="Campo Grande",
+                status="importada",
+                judicial_secret=False,
+            )
+        )
+        db.commit()
+
+        import_audit_service.ensure_legacy_import_batches(db)
+        row = db.scalar(select(Occurrence).where(Occurrence.source_id == source_id))
+        assert row is not None
+        assert row.import_batch_id is not None
+        batch_id = row.import_batch_id
+        batch = db.get(ImportBatch, batch_id)
+        assert batch is not None
+        assert batch.filename == "importacao-legada-sejusp"
+        assert batch.status == "legado"
+        assert batch.total_rows >= 1
+    finally:
+        db.close()
+        _cleanup_imported_test_data([source_id], [], [batch_id] if batch_id else [])
 
 
 def test_analytics_sejusp_source_applies_cross_filters():

@@ -8,6 +8,7 @@ from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.db.schema import garantir_colunas_incrementais
+from app.services import import_audit_service
 from app.services.demo_seed import seed_demo
 import app.models  # noqa: F401
 
@@ -27,6 +28,7 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         seed_demo(db)
+        import_audit_service.ensure_legacy_import_batches(db)
     finally:
         db.close()
 
