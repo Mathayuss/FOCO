@@ -1,9 +1,10 @@
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 import { api } from "../api"
 import type { SetGlobalFilters } from "../filterState"
-import type { CsvPreview, ImportCommit } from "../types"
+import type { CsvPreview, ImportBatch, ImportCommit } from "../types"
 
 const pct=(part:number,total:number)=>total?`${Math.round(part/total*100)}%`:"0%"
+const dateTime=(value:string|null)=>value?new Date(value).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"}):"-"
 const MAX_IMPORT_UPLOAD_MB=512
 const MAX_IMPORT_UPLOAD_BYTES=MAX_IMPORT_UPLOAD_MB*1024*1024
 const SEJUSP_DASHBOARD_FILTERS = {source:"sejusp",period:"all",type:"",municipality:"",unit:"",subtype:"",shift:""}
@@ -24,7 +25,23 @@ export default function Imports({setGlobalFilters,onShowDashboard}:ImportsProps)
  const [committing,setCommitting]=useState(false)
  const [commit,setCommit]=useState<ImportCommit|null>(null)
  const [dashboardReady,setDashboardReady]=useState(false)
+ const [batches,setBatches]=useState<ImportBatch[]>([])
+ const [batchTotal,setBatchTotal]=useState(0)
+ const [batchError,setBatchError]=useState("")
  const [error,setError]=useState("")
+
+ async function loadBatches(){
+  try{
+   const result=await api.importBatches({limite:8})
+   setBatches(result.items)
+   setBatchTotal(result.total)
+   setBatchError("")
+  }catch(e){
+   setBatchError(e instanceof Error ? e.message : "Falha ao carregar lotes")
+  }
+ }
+
+ useEffect(()=>{loadBatches()},[])
 
  async function handleFile(next:File|null){
   setFile(next); setPreview(null); setCommit(null); setDashboardReady(false); setError("")
@@ -45,6 +62,7 @@ export default function Imports({setGlobalFilters,onShowDashboard}:ImportsProps)
   try{
    const result = await api.commitImport(file)
    setCommit(result)
+   await loadBatches()
    if(result.source_scope==="RELATORIO_SEJUSP" && (result.inserted_rows>0 || result.skipped_duplicate_rows>0)){
     setGlobalFilters(dashboardFilters(result.registration_years))
     setDashboardReady(true)
@@ -86,6 +104,9 @@ export default function Imports({setGlobalFilters,onShowDashboard}:ImportsProps)
     <div className="metricRow"><span>Sem coordenada</span><b>{preview?.missing_coordinate_rows ?? "-"}</b></div>
    </div></section>
   </div>
+  <section className="panel importHistory"><header><div><b>Lotes recentes</b><small>{batchTotal} importações registradas</small></div></header><div className="panelBody">
+   {batchError ? <div className="errorBox">{batchError}</div> : <table className="dataTable"><thead><tr><th>Lote</th><th>Arquivo</th><th>Situação</th><th>Linhas</th><th>Início</th></tr></thead><tbody>{batches.length ? batches.map(item=><tr key={item.id_lote_importacao}><td>#{item.id_lote_importacao}</td><td title={item.nome_arquivo}>{item.nome_arquivo}</td><td>{item.situacao}</td><td>{item.linhas_inseridas}/{item.total_linhas}</td><td>{dateTime(item.iniciado_em)}</td></tr>) : <tr><td colSpan={5}>Nenhum lote registrado.</td></tr>}</tbody></table>}
+  </div></section>
   <div className="grid twoOne">
    <section className="panel"><header><div><b>Colunas</b><small>Reconhecimento canônico</small></div></header><div className="panelBody columnAudit">
     <div><span>Reconhecidas</span><div className="chipList">{preview?.recognized_headers.length ? preview.recognized_headers.map(h=><i key={h}>{h}</i>) : <small>Nenhum arquivo analisado.</small>}</div></div>

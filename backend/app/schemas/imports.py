@@ -45,3 +45,47 @@ class ImportCommitResponse(BaseModel):
     issues: list[CsvIssue]
     warnings: list[str]
     can_commit: bool
+
+
+class ImportBatchResponse(BaseModel):
+    id_lote_importacao: int
+    nome_arquivo: str
+    hash_arquivo: str
+    formato_arquivo: str
+    perfil_origem: str
+    sistema_origem: str
+    total_linhas: int
+    linhas_validas: int
+    linhas_invalidas: int
+    linhas_inseridas: int
+    linhas_duplicadas: int
+    linhas_sensiveis: int
+    linhas_coordenada_invalida: int
+    linhas_sem_coordenada: int
+    situacao: str
+    avisos: list[str] = Field(default_factory=list)
+    erro: str | None = None
+    iniciado_em: str
+    concluido_em: str | None = None
+
+
+class ImportBatchListResponse(BaseModel):
+    items: list[ImportBatchResponse]
+    total: int
+    limite: int
+    deslocamento: int
+
+
+class RejectedImportLineResponse(BaseModel):
+    id_linha_importacao_rejeitada: int
+    id_lote_importacao: int
+    numero_linha: int
+    motivos: list[str]
+    dados_origem: dict[str, str] | None = None
+
+
+class RejectedImportLineListResponse(BaseModel):
+    items: list[RejectedImportLineResponse]
+    total: int
+    limite: int
+    deslocamento: int

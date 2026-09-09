@@ -1,4 +1,4 @@
-import type { ApiList, AvailableFilters, CsvPreview, ImportCommit, MonthlyResponse, NamedMetric, Overview, Sla } from "./types"
+import type { ApiList, AvailableFilters, CsvPreview, ImportBatchList, ImportCommit, MonthlyResponse, NamedMetric, Overview, Sla } from "./types"
 
 export type HealthStatus = { status:string; service:string }
 
@@ -56,9 +56,11 @@ function apiBase(){
   }
 }
 
-function withParams(path:string, params?:AnalyticsParams){
+type QueryParams = AnalyticsParams & { limite?:number; deslocamento?:number }
+
+function withParams(path:string, params?:QueryParams){
   const query = new URLSearchParams()
-  Object.entries(params || {}).forEach(([key,value])=>{ if(value) query.set(key,value) })
+  Object.entries(params || {}).forEach(([key,value])=>{ if(value !== undefined && value !== null && value !== "") query.set(key,String(value)) })
   const suffix = query.toString()
   return suffix ? `${path}?${suffix}` : path
 }
@@ -78,7 +80,7 @@ async function request<T>(path:string, init?:RequestInit):Promise<T>{
   return r.json()
 }
 
-function get<T>(path:string, params?:AnalyticsParams){ return request<T>(withParams(path, params)) }
+function get<T>(path:string, params?:QueryParams){ return request<T>(withParams(path, params)) }
 function postForm<T>(path:string, body:FormData){ return request<T>(path, {method:"POST", body}) }
 
 export const api={
@@ -92,6 +94,7 @@ export const api={
   shifts:(params?:AnalyticsParams)=>get<ApiList<NamedMetric>>("/analytics/shifts", params),
   filters:(params?:AnalyticsParams)=>get<AvailableFilters>("/analytics/filters", params),
   sla:()=>get<Sla>("/analytics/sla"),
+  importBatches:(params?:{limite?:number; deslocamento?:number})=>get<ImportBatchList>("/imports/lotes", params),
   previewCsv:(file:File)=>{
     const body = new FormData()
     body.append("file", file)

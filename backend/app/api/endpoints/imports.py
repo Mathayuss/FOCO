@@ -1,11 +1,18 @@
 from pathlib import PurePath
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db.session import get_db
-from app.schemas.imports import CsvPreviewResponse, ImportCommitResponse
+from app.schemas.imports import (
+    CsvPreviewResponse,
+    ImportBatchListResponse,
+    ImportBatchResponse,
+    ImportCommitResponse,
+    RejectedImportLineListResponse,
+)
+from app.services import import_audit_service
 from app.services.import_service import commit_import, preview_import
 
 
@@ -63,6 +70,41 @@ async def _read_upload(file: UploadFile) -> tuple[str, bytes]:
         raise HTTPException(status_code=400, detail="Arquivo vazio")
 
     return filename, content
+
+
+@router.get("/lotes", response_model=ImportBatchListResponse)
+def list_import_batches(
+    limite: int = Query(default=20, ge=1, le=100),
+    deslocamento: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
+    return import_audit_service.list_batches(db, limite=limite, deslocamento=deslocamento)
+
+
+@router.get("/lotes/{id_lote_importacao}", response_model=ImportBatchResponse)
+def get_import_batch(id_lote_importacao: int, db: Session = Depends(get_db)):
+    batch = import_audit_service.get_batch(db, id_lote_importacao)
+    if batch is None:
+        raise HTTPException(status_code=404, detail="Lote de importação não encontrado")
+    return batch
+
+
+@router.get("/lotes/{id_lote_importacao}/rejeicoes", response_model=RejectedImportLineListResponse)
+def list_import_batch_rejections(
+    id_lote_importacao: int,
+    limite: int = Query(default=50, ge=1, le=200),
+    deslocamento: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
+    result = import_audit_service.list_rejected_lines(
+        db,
+        id_lote_importacao,
+        limite=limite,
+        deslocamento=deslocamento,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Lote de importação não encontrado")
+    return result
 
 
 @router.post("/preview", response_model=CsvPreviewResponse)

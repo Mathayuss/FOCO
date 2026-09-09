@@ -493,6 +493,22 @@ def test_import_commit_persists_batch_and_rejected_rows():
         assert result["inserted_rows"] == 1
         assert result["invalid_rows"] == 1
 
+        id_lote = result["id_lote_importacao"]
+        with TestClient(app) as client:
+            list_response = client.get("/api/v1/imports/lotes", params={"limite": 5}).json()
+            detail_response = client.get(f"/api/v1/imports/lotes/{id_lote}").json()
+            rejected_response = client.get(f"/api/v1/imports/lotes/{id_lote}/rejeicoes").json()
+            missing_response = client.get("/api/v1/imports/lotes/999999999")
+
+        assert any(item["id_lote_importacao"] == id_lote for item in list_response["items"])
+        assert detail_response["nome_arquivo"] == "sejusp-lote.csv"
+        assert detail_response["linhas_invalidas"] == 1
+        assert rejected_response["total"] == 1
+        assert rejected_response["items"][0]["numero_linha"] == 3
+        assert "abertura_em inválido" in rejected_response["items"][0]["motivos"]
+        assert rejected_response["items"][0]["dados_origem"]["Nº/ANO"] == "SEM-DATA"
+        assert missing_response.status_code == 404
+
         db = SessionLocal()
         try:
             batch = db.get(ImportBatch, result["id_lote_importacao"])

@@ -73,8 +73,12 @@ Quando uma tipificação não aparece no top mensal histórico, a API retorna `n
 POST /api/v1/imports/preview
 POST /api/v1/imports/csv/preview
 POST /api/v1/imports
-GET /api/v1/imports/{id}
+GET /api/v1/imports/lotes
+GET /api/v1/imports/lotes/{id_lote_importacao}
+GET /api/v1/imports/lotes/{id_lote_importacao}/rejeicoes
 ```
+
+`GET /api/v1/imports/lotes` aceita `limite` e `deslocamento`. As respostas usam campos em português, como `id_lote_importacao`, `nome_arquivo`, `linhas_inseridas`, `linhas_invalidas` e `situacao`.
 
 O preview aceita arquivos CSV, XLS ou XLSX de até 512 MB, com validação de extensão, MIME, nome de arquivo e conteúdo UTF-8 quando CSV. Arquivos XLS podem ser planilhas HTML/TSV exportadas por sistemas legados ou XLS binário antigo quando a dependência `xlrd` estiver instalada. O parser detecta `;`, tabulação, vírgula e `|`, localiza a linha real de cabeçalho quando houver título acima da tabela e limpa marcações como `<br>` nos nomes das colunas.
 Cabeçalhos canônicos obrigatórios: `id_origem`, `abertura_em`, `municipio` e `tipo`.
@@ -102,7 +106,7 @@ Relatórios SEJUSP são aceitos por equivalência automática de cabeçalhos. O 
 | `LONGITUDE` | `longitude` |
 
 Aliases antigos em inglês são aceitos somente como compatibilidade de importação; o padrão FOCO permanece em português.
-A importação grava `sistema_origem=RELATORIO_SEJUSP`, `situacao=importada` e preserva a linha original em `dados_origem`.
+A importação grava `sistema_origem=RELATORIO_SEJUSP`, `situacao=importada` e preserva a linha original em `dados_origem`. Também registra um lote em `lote_importacao`; linhas inválidas são preservadas em `linha_importacao_rejeitada` com motivos e payload original.
 
 ## 7. Integrações
 ```http

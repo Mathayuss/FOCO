@@ -51,3 +51,32 @@ export type ImportCommit = {
   warnings:string[]
   can_commit:boolean
 }
+
+export type ImportBatch = {
+  id_lote_importacao:number
+  nome_arquivo:string
+  hash_arquivo:string
+  formato_arquivo:string
+  perfil_origem:string
+  sistema_origem:string
+  total_linhas:number
+  linhas_validas:number
+  linhas_invalidas:number
+  linhas_inseridas:number
+  linhas_duplicadas:number
+  linhas_sensiveis:number
+  linhas_coordenada_invalida:number
+  linhas_sem_coordenada:number
+  situacao:string
+  avisos:string[]
+  erro:string|null
+  iniciado_em:string
+  concluido_em:string|null
+}
+
+export type ImportBatchList = {
+  items:ImportBatch[]
+  total:number
+  limite:number
+  deslocamento:number
+}
