@@ -30,6 +30,7 @@ class CsvPreviewResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 class ImportCommitResponse(BaseModel):
+    id_lote_importacao: int
     source_format: str
     source_profile: str
     source_scope: str

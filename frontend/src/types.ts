@@ -35,6 +35,7 @@ export type CsvPreview = {
 }
 
 export type ImportCommit = {
+  id_lote_importacao:number
   source_format:string
   source_profile:string
   source_scope:string

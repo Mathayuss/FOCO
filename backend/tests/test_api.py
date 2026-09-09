@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import json
 from io import BytesIO
 from uuid import uuid4
 from xml.sax.saxutils import escape
@@ -9,6 +10,7 @@ from sqlalchemy import delete, select
 from app.main import app
 from app.api.endpoints import imports as imports_endpoint
 from app.db.session import SessionLocal
+from app.models.import_batch import ImportBatch, RejectedImportLine
 from app.models.occurrence import Occurrence, OccurrenceVehicle
 from app.models.unit import Unit
 from app.models.vehicle import Vehicle
@@ -58,7 +60,7 @@ def _xlsx_bytes(headers: list[str], rows: list[list[str]]) -> bytes:
 
 
 
-def _cleanup_imported_test_data(source_ids: list[str], unit_names: list[str]):
+def _cleanup_imported_test_data(source_ids: list[str], unit_names: list[str], batch_ids: list[int] | None = None):
     db = SessionLocal()
     try:
         if source_ids:
@@ -69,6 +71,11 @@ def _cleanup_imported_test_data(source_ids: list[str], unit_names: list[str]):
                 )
             )
             db.commit()
+        for batch_id in batch_ids or []:
+            batch = db.get(ImportBatch, batch_id)
+            if batch:
+                db.delete(batch)
+        db.commit()
         for unit_name in unit_names:
             unit = db.scalar(select(Unit).where(Unit.name == unit_name))
             if not unit:
@@ -115,6 +122,8 @@ def test_database_model_names_are_portuguese():
     assert Vehicle.__tablename__ == "viatura"
     assert Occurrence.__tablename__ == "ocorrencia"
     assert OccurrenceVehicle.__tablename__ == "ocorrencia_viatura"
+    assert ImportBatch.__tablename__ == "lote_importacao"
+    assert RejectedImportLine.__tablename__ == "linha_importacao_rejeitada"
 
     assert set(Unit.__table__.columns.keys()) == {"id_unidade_operacional", "nome", "comando", "ativo"}
     assert set(Vehicle.__table__.columns.keys()) == {"id_viatura", "codigo", "tipo_viatura", "id_unidade_operacional", "ativo"}
@@ -157,7 +166,36 @@ def test_database_model_names_are_portuguese():
         "codigo_ibge",
         "segredo_de_justica",
         "dados_origem",
+        "id_lote_importacao",
         "importado_em",
+    }
+    assert set(ImportBatch.__table__.columns.keys()) == {
+        "id_lote_importacao",
+        "nome_arquivo",
+        "hash_arquivo",
+        "formato_arquivo",
+        "perfil_origem",
+        "sistema_origem",
+        "total_linhas",
+        "linhas_validas",
+        "linhas_invalidas",
+        "linhas_inseridas",
+        "linhas_duplicadas",
+        "linhas_sensiveis",
+        "linhas_coordenada_invalida",
+        "linhas_sem_coordenada",
+        "situacao",
+        "avisos",
+        "erro",
+        "iniciado_em",
+        "concluido_em",
+    }
+    assert set(RejectedImportLine.__table__.columns.keys()) == {
+        "id_linha_importacao_rejeitada",
+        "id_lote_importacao",
+        "numero_linha",
+        "motivos",
+        "dados_origem",
     }
 
 
@@ -369,6 +407,8 @@ def test_import_preview_accepts_sejusp_xlsx_report_headers():
 
 
 def test_import_commit_inserts_sejusp_rows_with_equivalent_fields(monkeypatch):
+    first = None
+    second = None
     cache_clears = 0
 
     def fake_clear_cache():
@@ -398,6 +438,7 @@ def test_import_commit_inserts_sejusp_rows_with_equivalent_fields(monkeypatch):
                 files={"file": ("sejusp.csv", content, "text/csv")},
             ).json()
 
+        assert first["id_lote_importacao"] > 0
         assert first["inserted_rows"] == 1
         assert first["skipped_duplicate_rows"] == 0
         assert first["source_scope"] == "RELATORIO_SEJUSP"
@@ -423,11 +464,59 @@ def test_import_commit_inserts_sejusp_rows_with_equivalent_fields(monkeypatch):
             assert row.priority == "sigilo_judicial"
             assert row.judicial_secret is True
             assert row.source_payload and "Nº/ANO" in row.source_payload
+            assert row.import_batch_id == first["id_lote_importacao"]
+            assert row.import_batch and row.import_batch.filename == "sejusp.csv"
             assert row.unit and row.unit.name == unit_name
         finally:
             db.close()
     finally:
-        _cleanup_imported_test_data([source_id], [unit_name])
+        batch_ids = [item["id_lote_importacao"] for item in (first, second) if item]
+        _cleanup_imported_test_data([source_id], [unit_name], batch_ids)
+
+
+def test_import_commit_persists_batch_and_rejected_rows():
+    result = None
+    source_id = f"LOTE-{uuid4()}"
+    content = (
+        "Nº/ANO,DATA DO REGISTRO,HORA DO REGISTRO,DATA DO FATO,HORA DO FATO,FATO,UNIDADE DE ORIGEM,MUNICÍPIO,LATITUDE,LONGITUDE\n"
+        f"{source_id},01/02/2025,08:10,01/02/2025,08:20,REMOCAO AO PS,1º GBM,Campo Grande,-20.45,-54.62\n"
+        "SEM-DATA,01/02/2025,08:10,,08:20,REMOCAO AO PS,1º GBM,Campo Grande,-20.45,-54.62\n"
+    ).encode("utf-8")
+    try:
+        with TestClient(app) as client:
+            result = client.post(
+                "/api/v1/imports",
+                files={"file": ("sejusp-lote.csv", content, "text/csv")},
+            ).json()
+
+        assert result["id_lote_importacao"] > 0
+        assert result["inserted_rows"] == 1
+        assert result["invalid_rows"] == 1
+
+        db = SessionLocal()
+        try:
+            batch = db.get(ImportBatch, result["id_lote_importacao"])
+            assert batch is not None
+            assert batch.filename == "sejusp-lote.csv"
+            assert batch.file_hash
+            assert batch.source_system == "RELATORIO_SEJUSP"
+            assert batch.total_rows == 2
+            assert batch.valid_rows == 1
+            assert batch.invalid_rows == 1
+            assert batch.inserted_rows == 1
+            assert batch.status == "concluido"
+            rejected = db.scalar(select(RejectedImportLine).where(RejectedImportLine.import_batch_id == batch.id))
+            assert rejected is not None
+            assert rejected.row_number == 3
+            assert "abertura_em inválido" in json.loads(rejected.reasons)
+            row = db.scalar(select(Occurrence).where(Occurrence.source_id == source_id))
+            assert row is not None
+            assert row.import_batch_id == batch.id
+        finally:
+            db.close()
+    finally:
+        batch_ids = [result["id_lote_importacao"]] if result else []
+        _cleanup_imported_test_data([source_id], [], batch_ids)
 
 
 def test_analytics_sejusp_source_applies_cross_filters():

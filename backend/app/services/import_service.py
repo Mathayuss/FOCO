@@ -1,4 +1,5 @@
 import csv
+import hashlib
 import io
 import json
 from html import unescape
@@ -7,13 +8,14 @@ import re
 import unicodedata
 import zipfile
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from xml.etree import ElementTree as ET
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models.import_batch import ImportBatch, RejectedImportLine
 from app.models.occurrence import Occurrence
 from app.models.unit import Unit
 from app.services import sejusp_analytics_service
@@ -715,13 +717,69 @@ def _units_by_name(db: Session, unit_names: list[str]) -> dict[str, Unit]:
     return units
 
 
+def _source_scope_for_profile(profile: str) -> str:
+    return SISTEMA_ORIGEM_SEJUSP if profile == "RELATORIO_SEJUSP" else SISTEMA_ORIGEM_FOCO
+
+
+def _issue_reasons(item: dict, missing_required_headers: list[str]) -> list[str]:
+    if item["issues"]:
+        return item["issues"]
+    if missing_required_headers:
+        return ["cabeçalhos obrigatórios ausentes"]
+    return []
+
+
+def _create_import_batch(db: Session, content: bytes, filename: str, parsed: dict, sistema_origem: str) -> ImportBatch:
+    batch = ImportBatch(
+        filename=filename,
+        file_hash=hashlib.sha256(content).hexdigest(),
+        file_format=parsed["source_format"],
+        source_profile=parsed["source_profile"],
+        source_system=sistema_origem,
+        total_rows=parsed["total_rows"],
+        valid_rows=parsed["valid_rows"] if not parsed["missing_required_headers"] else 0,
+        invalid_rows=parsed["invalid_rows"],
+        sensitive_rows=parsed["sensitive_rows"],
+        invalid_coordinate_rows=parsed["invalid_coordinate_rows"],
+        missing_coordinate_rows=parsed["missing_coordinate_rows"],
+        warnings=json.dumps(parsed["warnings"], ensure_ascii=False, separators=(",", ":")),
+    )
+    db.add(batch)
+    db.flush()
+    return batch
+
+
+def _store_rejected_rows(db: Session, batch: ImportBatch, parsed: dict) -> None:
+    missing = parsed["missing_required_headers"]
+    for item in parsed["_records"]:
+        reasons = _issue_reasons(item, missing)
+        if not reasons:
+            continue
+        db.add(
+            RejectedImportLine(
+                import_batch_id=batch.id,
+                row_number=item["row"],
+                reasons=json.dumps(reasons, ensure_ascii=False, separators=(",", ":")),
+                source_payload=item["record"].get("dados_origem"),
+            )
+        )
+
+
 def commit_import(db: Session, content: bytes, filename: str) -> dict:
     parsed = _parsed_import(content, filename)
+    sistema_origem = _source_scope_for_profile(parsed["source_profile"])
+    batch = _create_import_batch(db, content, filename, parsed, sistema_origem)
+    _store_rejected_rows(db, batch, parsed)
+
     if parsed["missing_required_headers"]:
+        batch.status = "rejeitado"
+        batch.finished_at = datetime.now(timezone.utc)
+        db.commit()
         return {
+            "id_lote_importacao": batch.id,
             "source_format": parsed["source_format"],
             "source_profile": parsed["source_profile"],
-            "source_scope": SISTEMA_ORIGEM_SEJUSP if parsed["source_profile"] == "RELATORIO_SEJUSP" else SISTEMA_ORIGEM_FOCO,
+            "source_scope": sistema_origem,
             "registration_years": parsed["registration_years"],
             "total_rows": parsed["total_rows"],
             "inserted_rows": 0,
@@ -735,7 +793,6 @@ def commit_import(db: Session, content: bytes, filename: str) -> dict:
             "can_commit": False,
         }
 
-    sistema_origem = SISTEMA_ORIGEM_SEJUSP if parsed["source_profile"] == "RELATORIO_SEJUSP" else SISTEMA_ORIGEM_FOCO
     valid_records = [item for item in parsed["_records"] if not item["issues"]]
     source_ids = [item["record"]["id_origem"] for item in valid_records]
     existing = _existing_source_ids(db, sistema_origem, source_ids)
@@ -772,15 +829,22 @@ def commit_import(db: Session, content: bytes, filename: str) -> dict:
             ibge_code=record["codigo_ibge"] or None,
             judicial_secret=record["segredo_de_justica"],
             source_payload=record["dados_origem"],
+            import_batch_id=batch.id,
         )
         db.add(occurrence)
         inserted += 1
         seen_inserted.add(source_id)
+    invalid_rows = parsed["total_rows"] - len(valid_records)
+    batch.inserted_rows = inserted
+    batch.duplicate_rows = skipped
+    batch.invalid_rows = invalid_rows
+    batch.status = "concluido" if inserted or skipped else "sem_linhas_novas"
+    batch.finished_at = datetime.now(timezone.utc)
     db.commit()
     if inserted and sistema_origem == SISTEMA_ORIGEM_SEJUSP:
         sejusp_analytics_service.clear_cache()
-    invalid_rows = parsed["total_rows"] - len(valid_records)
     return {
+        "id_lote_importacao": batch.id,
         "source_format": parsed["source_format"],
         "source_profile": parsed["source_profile"],
         "source_scope": sistema_origem,

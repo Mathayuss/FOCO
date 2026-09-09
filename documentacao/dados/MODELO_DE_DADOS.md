@@ -55,3 +55,38 @@ AreaOperacionalRegiaoUrbana
 ```
 
 As áreas devem ser versionadas por vigência.
+
+## Rastreabilidade de importação
+
+```text
+LoteImportacao
+- id_lote_importacao
+- nome_arquivo
+- hash_arquivo
+- formato_arquivo
+- perfil_origem
+- sistema_origem
+- total_linhas
+- linhas_validas
+- linhas_invalidas
+- linhas_inseridas
+- linhas_duplicadas
+- linhas_sensiveis
+- linhas_coordenada_invalida
+- linhas_sem_coordenada
+- situacao
+- avisos
+- erro
+- iniciado_em
+- concluido_em
+
+LinhaImportacaoRejeitada
+- id_linha_importacao_rejeitada
+- id_lote_importacao
+- numero_linha
+- motivos
+- dados_origem
+```
+
+Cada ocorrência importada pode apontar para `id_lote_importacao`. Linhas rejeitadas
+devem preservar o payload original e os motivos de rejeição para auditoria.

@@ -19,6 +19,12 @@ Ela declara as tabelas centrais com nomes em português:
 - `ocorrencia`
 - `ocorrencia_viatura`
 
+A migração `20260908_0002_lote_importacao.py` adiciona rastreabilidade de importação:
+
+- `lote_importacao`
+- `linha_importacao_rejeitada`
+- `ocorrencia.id_lote_importacao`
+
 ## Passo 1 — aplicar a migração
 
 ```bash

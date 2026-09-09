@@ -38,9 +38,11 @@ class Occurrence(Base):
     ibge_code: Mapped[str | None] = mapped_column("codigo_ibge", String(20), nullable=True, index=True)
     judicial_secret: Mapped[bool] = mapped_column("segredo_de_justica", default=False, index=True)
     source_payload: Mapped[str | None] = mapped_column("dados_origem", Text, nullable=True)
+    import_batch_id: Mapped[int | None] = mapped_column("id_lote_importacao", ForeignKey("lote_importacao.id_lote_importacao"), nullable=True, index=True)
     imported_at: Mapped[datetime] = mapped_column("importado_em", DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     unit = relationship("Unit", back_populates="occurrences")
+    import_batch = relationship("ImportBatch", back_populates="occurrences")
     vehicle_links = relationship("OccurrenceVehicle", back_populates="occurrence", cascade="all, delete-orphan")
 
 class OccurrenceVehicle(Base):

@@ -22,6 +22,10 @@ COLUNAS_OCORRENCIA_INCREMENTAIS = {
         "sqlite": "TEXT",
         "postgresql": "TEXT",
     },
+    "id_lote_importacao": {
+        "sqlite": "INTEGER",
+        "postgresql": "INTEGER",
+    },
 }
 
 

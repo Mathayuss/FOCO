@@ -73,7 +73,7 @@ export default function Imports({setGlobalFilters,onShowDashboard}:ImportsProps)
     {error && <div className="errorBox">{error}</div>}
     <div className="importNote"><b>Escopo atual</b><span>Preview, equivalência de colunas, regras mínimas, duplicidade e insert das linhas válidas.</span></div>
     <button className="importAction" disabled={!file || !preview?.valid_rows || loading || committing} onClick={commitFile}>{committing?"Importando":"Importar linhas válidas"}</button>
-    {commit && <div className="importResult"><b>Importação concluída</b><span>{commit.inserted_rows} inseridas · {commit.skipped_duplicate_rows} duplicadas · {commit.invalid_rows} inválidas</span>{dashboardReady && <><small>Fonte SEJUSP ativada {dashboardScope(commit.registration_years)}.</small><button type="button" onClick={openSejuspDashboard}>Abrir dashboard SEJUSP</button></>}</div>}
+    {commit && <div className="importResult"><b>Importação concluída</b><span>Lote #{commit.id_lote_importacao} · {commit.inserted_rows} inseridas · {commit.skipped_duplicate_rows} duplicadas · {commit.invalid_rows} inválidas</span>{dashboardReady && <><small>Fonte SEJUSP ativada {dashboardScope(commit.registration_years)}.</small><button type="button" onClick={openSejuspDashboard}>Abrir dashboard SEJUSP</button></>}</div>}
    </section>
    <section className="panel importPanel"><header><div><b>Resumo do arquivo</b><small>Retorno da API de importação</small></div></header><div className="panelBody importSummary">
     <div className="metricRow"><span>Linhas</span><b>{preview?.total_rows ?? "-"}</b></div>
