@@ -18,6 +18,13 @@ function periodKeyForMonth(month:string, periods:PeriodOption[]){
  return periods.find(option=>option.months.length===1 && option.months[0]===month)?.key || ""
 }
 
+function shiftForHour(hour:number){
+ if(hour >= 0 && hour < 6) return "Madrugada"
+ if(hour < 12) return "Manhã"
+ if(hour < 18) return "Tarde"
+ return "Noite"
+}
+
 type OverviewProps={globalFilters:GlobalFilters;setGlobalFilters:SetGlobalFilters;clearGlobalFilters:()=>void}
 
 export default function Overview({globalFilters,setGlobalFilters,clearGlobalFilters}:OverviewProps){
@@ -67,7 +74,8 @@ export default function Overview({globalFilters,setGlobalFilters,clearGlobalFilt
   return {tooltip:{trigger:"axis"},legend:{show:hasComparison,top:0,right:12,textStyle:{color:"#aeb4bd",fontSize:10}},grid:{left:38,right:14,top:hasComparison?34:20,bottom:30},xAxis:{type:"category",data:months.map(x=>x.mes),...axis},yAxis:{type:"value",...axis},series}
  },[months,comparison,hasComparison,period,periodOptions])
  const typeOption=useMemo(()=>({tooltip:{trigger:"item"},grid:{left:135,right:20,top:8,bottom:20},xAxis:{type:"value",...axis},yAxis:{type:"category",inverse:true,data:types.slice(0,7).map(x=>x.nome),...axis,axisLabel:{color:"#aeb4bd",fontSize:9,width:120,overflow:"truncate"}},series:[{type:"bar",data:types.slice(0,7).map(x=>x.total),barWidth:10,itemStyle:{borderRadius:6,color:(p:any)=>types[p.dataIndex]?.nome===typeFilter?"#ffcc29":"#d83135"}}]}),[types,typeFilter])
- const hourOption=useMemo(()=>({tooltip:{trigger:"axis"},grid:{left:35,right:12,top:16,bottom:28},xAxis:{type:"category",data:hours.map((_,i)=>String(i).padStart(2,"0")), ...axis},yAxis:{type:"value",...axis},series:[{type:"bar",data:hours,barWidth:"62%",itemStyle:{color:(p:any)=>p.dataIndex>=7&&p.dataIndex<=18?"#d83135":"#343a44",borderRadius:[3,3,0,0]}}]}),[hours])
+ const hourEvents={click:(p:any)=>{ const index=Number(p?.dataIndex); if(source==="sejusp" && Number.isInteger(index)) setGlobalFilters({shift:shiftForHour(index)}) }}
+ const hourOption=useMemo(()=>({tooltip:{trigger:"axis"},grid:{left:35,right:12,top:16,bottom:28},xAxis:{type:"category",data:hours.map((_,i)=>String(i).padStart(2,"0")), ...axis},yAxis:{type:"value",...axis},series:[{type:"bar",data:hours,barWidth:"62%",itemStyle:{color:(p:any)=>shift&&shiftForHour(p.dataIndex)===shift?"#ffcc29":p.dataIndex>=7&&p.dataIndex<=18?"#d83135":"#343a44",borderRadius:[3,3,0,0]}}]}),[hours,shift])
  if(error)return <div className="errorBox">{error}</div>
  return <>
   <div className="pageHead"><div><div className="eyebrow">DASHBOARD / HOME</div><h1>Visão Geral</h1><p>Panorama consolidado de ocorrências e indicadores operacionais do MVP.</p></div><span className="badge">v0.3 · BI FUNCIONAL</span></div>
@@ -84,7 +92,7 @@ export default function Overview({globalFilters,setGlobalFilters,clearGlobalFilt
    <KpiCard label="Maior demanda" value={ov?.top_type||"-"} meta={ov?.top_municipality||"carregando"} tone="neutral"/>
   </div>
   <div className="grid twoOne"><Panel title="Evolução das ocorrências" sub={partialTypeSeries?"Série parcial: meses ausentes sem valor conhecido":hasComparison?"Comparativo mensal 2025 x 2026":typeFilter?`Filtro API: ${typeFilter}`:"Filtro API: período"}><ReactECharts option={monthlyOption} onEvents={monthEvents} style={{height:285}}/></Panel><Panel title="Principais tipificações" sub="Clique em uma barra para filtrar"><ReactECharts option={typeOption} onEvents={typeEvents} style={{height:285}}/></Panel></div>
-  <div className="grid twoOne"><Panel title="Concentração territorial" sub={source==="sejusp"?"Filtro cruzado aplicado sobre a base importada":hasRequestedLimited?"Seleção contextual; consolidado geral sem cruzamento":"Mapa consolidado por município"}><MapPanel cities={cities.slice(0,20)} selected={municipality} onSelect={city=>setGlobalFilters({municipality:city.nome})}/></Panel><Panel title="Ocorrências por hora" sub={source==="sejusp"?"Perfil horário do recorte filtrado":hasRequestedLimited?"Consolidado geral: sem cruzamento disponível":"Perfil horário consolidado"}><ReactECharts option={hourOption} style={{height:330}}/></Panel></div>
+  <div className="grid twoOne"><Panel title="Concentração territorial" sub={source==="sejusp"?"Filtro cruzado aplicado sobre a base importada":hasRequestedLimited?"Seleção contextual; consolidado geral sem cruzamento":"Mapa consolidado por município"}><MapPanel cities={cities.slice(0,20)} selected={municipality} onSelect={city=>setGlobalFilters({municipality:city.nome})}/></Panel><Panel title="Ocorrências por hora" sub={source==="sejusp"?"Perfil horário do recorte filtrado":hasRequestedLimited?"Consolidado geral: sem cruzamento disponível":"Perfil horário consolidado"}><ReactECharts option={hourOption} onEvents={hourEvents} style={{height:330}}/></Panel></div>
   <div className="coveragePanel"><b>Cobertura v0.3</b><span>{ov?.coverage?.types || types.length} tipificações retornadas, {ov?.coverage?.municipalities || cities.length} municípios, {ov?.coverage?.units || units.length} unidades e {ov?.coverage?.hours || hours.length} faixas horárias disponíveis na API atual.{partialTypeSeries && ` Tipificação sem valor mensal disponível em: ${missingTypeMonths.join(", ")}.`}</span></div>
  </>
 }
