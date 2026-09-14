@@ -42,13 +42,14 @@ export default function Overview({globalFilters,setGlobalFilters,clearGlobalFilt
  const [error,setError]=useState("")
  const {source,period,type:typeFilter,municipality,unit,subtype,shift}=globalFilters
  const params=useMemo(()=>toAnalyticsParams(globalFilters),[source,period,typeFilter,municipality,unit,subtype,shift])
- useEffect(()=>{api.filters(params).then(setFilters).catch(()=>{})},[params])
  useEffect(()=>{
+  let alive=true
   setLoading(true); setError("")
-  Promise.all([api.overview(params),api.sla(),api.monthly(params),api.types(params),api.cities(params),api.hours(params),api.units(params)])
-   .then(([a,b,c,d,e,f,g])=>{setOv(a);setSla(b);setMonths(c.items);setComparison(c.comparison);setTypes(d.items);setCities(e.items);setHours(f.items);setUnits(g.items)})
-   .catch((err)=>setError(err instanceof ApiError ? err.message : "Não foi possível acessar a API. Verifique se o backend está ativo."))
-   .finally(()=>setLoading(false))
+  Promise.all([api.filters(params),api.overview(params),api.sla(),api.monthly(params),api.types(params),api.cities(params),api.hours(params),api.units(params)])
+   .then(([available,a,b,c,d,e,f,g])=>{if(!alive)return;setFilters(available);setOv(a);setSla(b);setMonths(c.items);setComparison(c.comparison);setTypes(d.items);setCities(e.items);setHours(f.items);setUnits(g.items)})
+   .catch((err)=>{if(alive)setError(err instanceof ApiError ? err.message : "Não foi possível acessar a API. Verifique se o backend está ativo.")})
+   .finally(()=>{if(alive)setLoading(false)})
+  return ()=>{alive=false}
  },[params])
  const periodOptions=filters?.periods.length?filters.periods:fallbackPeriods
  const typeOptions=filters?.types.length?filters.types:types.map(item=>item.nome)
