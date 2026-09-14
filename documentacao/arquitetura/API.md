@@ -52,9 +52,9 @@ GET /api/v1/analytics/sla
 
 Parâmetros v0.3 nos endpoints de BI:
 ```text
-source=historico | sejusp
-fonte=historico | sejusp  # alias compatível em português
-period=all | jan | fev | mar | abr | mai | jun | jul | q1 | q2 | last3
+source=sejusp
+fonte=sejusp  # alias compatível em português
+period=all | ano-AAAA | AAAA-MM | AAAA-qN
 type=<tipificação>
 municipality=<município>
 unit=<unidade>
@@ -62,11 +62,9 @@ subtype=<subtipo>
 shift=<turno>
 ```
 
-A fonte padrão é `source=historico`, baseada no consolidado estático do MVP. Nessa fonte, somente `period` e `type` são filtráveis nos endpoints `overview`, `monthly` e `types`. Endpoints consolidados como `cities`, `hours` e `units` retornam metadados em `unavailable_filters` quando recebem filtros que ainda não podem ser aplicados sem agregações cruzadas.
 
-A fonte `source=sejusp` lê as linhas importadas em `ocorrencia` com `sistema_origem=RELATORIO_SEJUSP`. Nessa fonte, `period`, `type`, `municipality`, `unit`, `subtype` e `shift` são filtros cruzados reais, calculados a partir do banco. O endpoint `/analytics/filters?source=sejusp` aceita os mesmos parâmetros de BI e retorna os valores disponíveis no recorte atual, mantendo o próprio campo selecionado aberto para troca.
+A fonte padrão e única `source=sejusp` lê as linhas importadas em `ocorrencia` com `sistema_origem=RELATORIO_SEJUSP`. Nessa fonte, `period`, `type`, `municipality`, `unit`, `subtype` e `shift` são filtros cruzados reais, calculados a partir do banco. O endpoint `/analytics/filters?source=sejusp` aceita os mesmos parâmetros de BI e retorna os valores disponíveis no recorte atual, mantendo o próprio campo selecionado aberto para troca.
 
-Quando uma tipificação não aparece no top mensal histórico, a API retorna `null` naquele mês e marca `coverage.partial_type_series=true`. A ausência de granularidade não deve ser interpretada como zero.
 
 ## 6. Importações
 ```http

@@ -10,7 +10,7 @@ import Panel from "../components/Panel"
 const fmt=(n:number)=>n.toLocaleString("pt-BR")
 const dec=(n:number)=>n.toFixed(1).replace(".",",")
 const axis={axisLine:{lineStyle:{color:"#3a4049"}},axisLabel:{color:"#aeb4bd",fontSize:10},splitLine:{lineStyle:{color:"#2b3037"}}}
-const fallbackPeriods=[{key:"all",label:"Jan-Jul/2026",months:["Jan","Fev","Mar","Abr","Mai","Jun","Jul"]},{key:"jan",label:"Jan/2026",months:["Jan"]},{key:"fev",label:"Fev/2026",months:["Fev"]},{key:"mar",label:"Mar/2026",months:["Mar"]},{key:"abr",label:"Abr/2026",months:["Abr"]},{key:"mai",label:"Mai/2026",months:["Mai"]},{key:"jun",label:"Jun/2026",months:["Jun"]},{key:"jul",label:"Jul/2026",months:["Jul"]}]
+const fallbackPeriods=[{key:"all",label:"Todo período importado",months:[]}]
 const filterLabels:Record<string,string>={period:"Período",type:"Tipo",municipality:"Município",unit:"Unidade",subtype:"Subtipo",shift:"Turno"}
 
 
@@ -56,7 +56,7 @@ function PageHead({area,title,caption,badge}:{area:string;title:string;caption:s
 function FilterBar({filters,globalFilters,setGlobalFilters,children}:{filters:AvailableFilters|null;globalFilters:GlobalFilters;setGlobalFilters:SetGlobalFilters;children?:ReactNode}){
  const periodOptions=filters?.periods.length?filters.periods:fallbackPeriods
  const typeOptions=filters?.types || []
- const sourceOptions=filters?.sources || [{key:"historico",label:"Histórico consolidado"},{key:"sejusp",label:"SEJUSP importado"}]
+ const sourceOptions=filters?.sources || [{key:"sejusp",label:"SEJUSP importado"}]
  const sourceChange=(value:string)=>setGlobalFilters({source:value,period:"all",type:"",municipality:"",unit:"",subtype:"",shift:""})
  return <div className="filters pageFilterRow"><span>FILTROS</span><select value={globalFilters.source} onChange={e=>sourceChange(e.target.value)}>{sourceOptions.map(option=><option key={option.key} value={option.key}>{option.label}</option>)}</select><select value={globalFilters.period} onChange={e=>setGlobalFilters({period:e.target.value})}>{periodOptions.map(option=><option key={option.key} value={option.key}>{option.label}</option>)}</select><select value={globalFilters.type} onChange={e=>setGlobalFilters({type:e.target.value})}><option value="">Todas as tipificações</option>{typeOptions.map(item=><option key={item} value={item}>{item}</option>)}</select>{children}</div>
 }
@@ -90,7 +90,7 @@ function useGlobalParams(globalFilters:GlobalFilters){
 export function EvolutionPage({globalFilters,setGlobalFilters}:DashboardProps){
  const params=useGlobalParams(globalFilters)
  const state=useSnapshot(params)
- const hasComparison=state.comparison.length>0 && !globalFilters.type && globalFilters.source==="historico"
+ const hasComparison=state.comparison.length>0
  const comparisonSummary=state.overview?.comparison
  const monthEvents={click:(p:any)=>{ const key=periodKeyForMonth(String(p?.name || ""),state.filters?.periods); if(key) setGlobalFilters({period:togglePeriod(globalFilters.period,key)}) }}
  const selectedMonths=new Set(((state.filters?.periods || fallbackPeriods).find(option=>option.key===globalFilters.period)?.months || []))
@@ -98,7 +98,7 @@ export function EvolutionPage({globalFilters,setGlobalFilters}:DashboardProps){
  const series:any[]=[{name:globalFilters.source==="sejusp"?"SEJUSP":"2026",type:"line",smooth:true,symbolSize:(_:unknown,p:any)=>highlightPeriod&&selectedMonths.has(state.monthly[p.dataIndex]?.mes)?10:7,data:state.monthly.map(item=>item.total),lineStyle:{width:3,color:"#d83135"},itemStyle:{color:"#ffcc29"}}]
  if(hasComparison) series.unshift({name:"2025",type:"line",smooth:true,symbolSize:5,data:state.comparison.map(item=>item.v2025),lineStyle:{width:2,color:"#58a6ff",type:"dashed"},itemStyle:{color:"#58a6ff"}})
  const option={tooltip:{trigger:"axis"},legend:{show:hasComparison,textStyle:{color:"#aeb4bd"}},grid:{left:42,right:18,top:hasComparison?34:18,bottom:34},xAxis:{type:"category",data:state.monthly.map(item=>item.mes),...axis},yAxis:{type:"value",...axis},series}
- return <><PageHead area="ANÁLISE / EVOLUÇÃO" title="Evolução" caption="Volume mensal e comparação histórica." badge="Série temporal"/><FilterBar filters={state.filters} globalFilters={globalFilters} setGlobalFilters={setGlobalFilters}/><Warning items={state.overview?.unavailable_filters}/><LoadState state={state}><div className="kpiGrid compact"><KpiCard label="Total" value={fmt(state.overview?.total || 0)} meta="período selecionado" tone="red"/><KpiCard label="Média diária" value={dec(state.overview?.average_per_day || 0)} meta="dias reais do período"/><KpiCard label="Variação" value={state.overview?.delta_pct==null?"sem base":`${state.overview.delta_pct>0?"+":""}${dec(state.overview.delta_pct)}%`} meta={state.overview?.comparison?.baseline_label || state.overview?.comparison?.reason || "base 2025"} tone="gold"/><KpiCard label="Base comparada" value={comparisonSummary?.baseline_total==null?"sem base":fmt(comparisonSummary.baseline_total)} meta={comparisonSummary?.baseline_label || comparisonSummary?.reason || "comparativo histórico"} tone="neutral"/></div><Panel title="Evolução mensal" sub={hasComparison?"Comparativo 2025 x 2026":"Série filtrada pela API"}><ReactECharts option={option} onEvents={monthEvents} style={{height:390}}/></Panel></LoadState></>
+ return <><PageHead area="ANÁLISE / EVOLUÇÃO" title="Evolução" caption="Volume mensal e comparação disponível." badge="Série temporal"/><FilterBar filters={state.filters} globalFilters={globalFilters} setGlobalFilters={setGlobalFilters}/><Warning items={state.overview?.unavailable_filters}/><LoadState state={state}><div className="kpiGrid compact"><KpiCard label="Total" value={fmt(state.overview?.total || 0)} meta="período selecionado" tone="red"/><KpiCard label="Média diária" value={dec(state.overview?.average_per_day || 0)} meta="dias reais do período"/><KpiCard label="Variação" value={state.overview?.delta_pct==null?"sem base":`${state.overview.delta_pct>0?"+":""}${dec(state.overview.delta_pct)}%`} meta={state.overview?.comparison?.baseline_label || state.overview?.comparison?.reason || "base 2025"} tone="gold"/><KpiCard label="Base comparada" value={comparisonSummary?.baseline_total==null?"sem base":fmt(comparisonSummary.baseline_total)} meta={comparisonSummary?.baseline_label || comparisonSummary?.reason || "comparativo histórico"} tone="neutral"/></div><Panel title="Evolução mensal" sub={hasComparison?"Comparativo 2025 x 2026":"Série filtrada pela API"}><ReactECharts option={option} onEvents={monthEvents} style={{height:390}}/></Panel></LoadState></>
 }
 
 export function TypificationPage({globalFilters,setGlobalFilters}:DashboardProps){
@@ -146,15 +146,17 @@ export function UnitsPage({globalFilters,setGlobalFilters}:DashboardProps){
 export function SlaPage(){
  const state=useSnapshot({})
  const sla=state.sla
- const items=sla?[{nome:"Calculáveis",total:sla.computable,pct:Math.round(sla.computable/sla.sample_size*1000)/10},{nome:"Sem cobertura",total:sla.sample_size-sla.computable,pct:Math.round((sla.sample_size-sla.computable)/sla.sample_size*1000)/10}]:[]
- return <><PageHead area="OPERAÇÃO / SLA" title="SLA" caption="Indicadores demonstrativos separados do histórico consolidado." badge="Demo"/><LoadState state={state}><div className="kpiGrid compact"><KpiCard label="Conformidade" value={`${dec(sla?.compliance_pct || 0)}%`} meta="base demonstrativa" tone="green"/><KpiCard label="Mediana" value={`${dec(sla?.median_response_minutes || 0)} min`} meta="tempo-resposta"/><KpiCard label="P90" value={`${dec(sla?.p90_response_minutes || 0)} min`} meta="tempo-resposta" tone="gold"/><KpiCard label="Cobertura" value={`${sla?.computable || 0}/${sla?.sample_size || 0}`} meta="registros calculáveis" tone="neutral"/></div><div className="grid twoOne"><Panel title="Cobertura do indicador" sub="Dado demonstrativo"><Table items={items}/></Panel><section className="statusPanel"><b>Escopo atual</b><span>O SLA permanece demonstrativo até existirem timestamps operacionais suficientes na base real ou histórica detalhada.</span></section></div></LoadState></>
+ const coveragePct=sla?.sample_size?Math.round(sla.computable/sla.sample_size*1000)/10:0
+ const hasCoverage=Boolean(sla?.computable)
+ const items=sla?[{nome:"Calculáveis",total:sla.computable,pct:coveragePct},{nome:"Sem cobertura",total:sla.sample_size-sla.computable,pct:Math.round((100-coveragePct)*10)/10}]:[]
+ return <><PageHead area="OPERAÇÃO / SLA" title="SLA" caption="Cobertura calculada apenas com timestamps operacionais disponíveis." badge={hasCoverage?"Calculável":"Sem cobertura"}/><LoadState state={state}><div className="kpiGrid compact"><KpiCard label="Conformidade" value={hasCoverage?`${dec(sla?.compliance_pct || 0)}%`:"sem dados"} meta="meta de 15 minutos" tone="green"/><KpiCard label="Mediana" value={hasCoverage?`${dec(sla?.median_response_minutes || 0)} min`:"sem dados"} meta="tempo-resposta"/><KpiCard label="P90" value={hasCoverage?`${dec(sla?.p90_response_minutes || 0)} min`:"sem dados"} meta="tempo-resposta" tone="gold"/><KpiCard label="Cobertura" value={`${sla?.computable || 0}/${sla?.sample_size || 0}`} meta={`${dec(coveragePct)}% calculável`} tone="neutral"/></div><div className="grid twoOne"><Panel title="Cobertura do indicador" sub="Base SEJUSP importada"><Table items={items}/></Panel><section className="statusPanel"><b>Escopo atual</b><span>O SLA somente será calculado quando existirem timestamps suficientes. Registros sem chegada não entram no indicador e permanecem contabilizados na cobertura.</span></section></div></LoadState></>
 }
 
 export function QualityPage(){
  const state=useSnapshot({})
  const coverage=state.overview?.coverage
  const rows=[
-  {label:"Fonte histórica",value:state.overview?.source_scope || "-",tone:"cyan"},
+  {label:"Fonte operacional",value:state.overview?.source_scope || "-",tone:"cyan"},
   {label:"SLA",value:state.sla?.source_scope || "-",tone:"gold"},
   {label:"Períodos",value:String(state.filters?.periods.length || 0),tone:"cyan"},
   {label:"Tipificações",value:String(state.filters?.types.length || 0),tone:"cyan"},

@@ -7,5 +7,5 @@ export default function Placeholder({name}:{name:string}){
   'Território':'A Visão Geral já possui mapa por município. Próxima entrega: malhas PostGIS, heatmap e drill-down região/bairro.',
   'Qualidade':'Próxima entrega: completude, campos faltantes, SLA calculável, coordenadas e erros por fonte.'
  }
- return <div className="placeholder"><span>EM ESTRUTURAÇÃO</span><h1>{name}</h1><p>{notes[name]||'Módulo previsto no escopo do MVP. A navegação já está preparada para receber a implementação.'}</p><div className="placeholderCard"><b>Base arquitetural pronta</b><ul><li>API versionada</li><li>modelos de domínio separados</li><li>componentes React reutilizáveis</li><li>fonte histórica isolada de dados DEMO</li></ul></div></div>
+ return <div className="placeholder"><span>EM ESTRUTURAÇÃO</span><h1>{name}</h1><p>{notes[name]||'Módulo previsto no escopo do MVP. A navegação já está preparada para receber a implementação.'}</p><div className="placeholderCard"><b>Base arquitetural pronta</b><ul><li>API versionada</li><li>modelos de domínio separados</li><li>componentes React reutilizáveis</li><li>fontes de dados rastreáveis</li></ul></div></div>
 }

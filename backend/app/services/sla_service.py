@@ -1,5 +1,5 @@
 from statistics import median
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from app.models.occurrence import Occurrence
 
@@ -21,15 +21,19 @@ def percentile(values: list[float], p: float) -> float:
     return values[lo] * (1 - frac) + values[hi] * frac
 
 def calculate(db: Session) -> dict:
-    rows = db.scalars(select(Occurrence).where(Occurrence.source == "DADO_DEMO")).all()
-    response = [m for o in rows if (m := _minutes(o.opened_at, o.arrival_at)) is not None]
+    source_filter = Occurrence.source == "RELATORIO_SEJUSP"
+    sample_size = int(db.scalar(select(func.count(Occurrence.id)).where(source_filter)) or 0)
+    timestamps = db.execute(
+        select(Occurrence.opened_at, Occurrence.arrival_at).where(source_filter, Occurrence.arrival_at.is_not(None))
+    ).all()
+    response = [m for opened_at, arrival_at in timestamps if (m := _minutes(opened_at, arrival_at)) is not None]
     compliant = sum(1 for x in response if x <= TARGET_MINUTES)
     return {
-        "sample_size": len(rows),
+        "sample_size": sample_size,
         "computable": len(response),
         "compliance_pct": round((compliant / len(response) * 100) if response else 0, 1),
         "median_response_minutes": round(median(response), 1) if response else 0,
         "p90_response_minutes": round(percentile(response, .90), 1),
         "target_minutes": TARGET_MINUTES,
-        "source_scope": "demo_operational",
+        "source_scope": "sejusp_importado",
     }

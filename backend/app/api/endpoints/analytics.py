@@ -2,13 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.schemas.analytics import OverviewResponse, SlaResponse
-from app.services import historical_service, sejusp_analytics_service
+from app.services import sejusp_analytics_service
 from app.services.sla_service import calculate
 
 router = APIRouter(prefix="/analytics", tags=["análises"])
-VALID_SOURCES = {"historico", "sejusp"}
+VALID_SOURCES = {"sejusp"}
 SOURCE_OPTIONS = [
-    {"key": "historico", "label": "Histórico consolidado"},
     {"key": "sejusp", "label": "SEJUSP importado"},
 ]
 
@@ -30,11 +29,11 @@ def filters(
     unit: str | None = Query(default=None),
     subtype: str | None = Query(default=None),
     shift: str | None = Query(default=None),
-    source: str | None = Query(default="historico"),
+    source: str | None = Query(default="sejusp"),
     fonte: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
-    source_key = fonte or source or "historico"
+    source_key = fonte or source or "sejusp"
     if source_key not in VALID_SOURCES:
         raise _invalid_source(source_key)
     params = {
@@ -57,26 +56,14 @@ def filters(
             subtype=subtype,
             shift=shift,
         )
-    else:
-        errors = historical_service.validate_filter_params(
-            period=period,
-            type_name=type,
-            municipality=municipality,
-            unit=unit,
-            subtype=subtype,
-            shift=shift,
-        )
     if errors:
         raise HTTPException(status_code=400, detail={"code": "INVALID_FILTER", "errors": errors})
     return params
 
 
 def _dispatch(params: dict, name: str):
-    source = params["source"]
     values = {key: value for key, value in params.items() if key not in {"source", "db"}}
-    if source == "sejusp":
-        return getattr(sejusp_analytics_service, name)(params["db"], **values)
-    return getattr(historical_service, name)(**values)
+    return getattr(sejusp_analytics_service, name)(params["db"], **values)
 
 
 @router.get("/overview", response_model=OverviewResponse)
@@ -122,11 +109,11 @@ def available_filters(
     unit: str | None = Query(default=None),
     subtype: str | None = Query(default=None),
     shift: str | None = Query(default=None),
-    source: str | None = Query(default="historico"),
+    source: str | None = Query(default="sejusp"),
     fonte: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
-    source_key = fonte or source or "historico"
+    source_key = fonte or source or "sejusp"
     if source_key not in VALID_SOURCES:
         raise _invalid_source(source_key)
     if source_key == "sejusp":
@@ -170,29 +157,6 @@ def available_filters(
             "source_scope": "sejusp_importado",
             "sources": SOURCE_OPTIONS,
         }
-    errors = historical_service.validate_filter_params(
-        period=period,
-        type_name=type,
-        municipality=municipality,
-        unit=unit,
-        subtype=subtype,
-        shift=shift,
-    )
-    if errors:
-        raise HTTPException(status_code=400, detail={"code": "INVALID_FILTER", "errors": errors})
-    values = historical_service.available_filter_values()
-    return {
-        "periods": historical_service.period_options(),
-        "types": values["types"],
-        "municipalities": values["municipalities"],
-        "units": values["units"],
-        "subtypes": values["subtypes"],
-        "shifts": values["shifts"],
-        "filterable_dimensions": ["period", "type"],
-        "limited_dimensions": ["municipality", "unit", "subtype", "shift"],
-        "source_scope": "historical_consolidated",
-        "sources": SOURCE_OPTIONS,
-    }
 
 
 @router.get("/sla", response_model=SlaResponse)

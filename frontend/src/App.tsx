@@ -25,7 +25,7 @@ function loadGlobalFilters(): GlobalFilters {
   const raw = window.localStorage.getItem(FILTER_STORAGE_KEY)
   if(!raw) return defaultGlobalFilters
   const parsed = JSON.parse(raw) as Partial<GlobalFilters>
-  return {...defaultGlobalFilters,...parsed,period:parsed.period || "all"}
+  return {...defaultGlobalFilters,...parsed,source:"sejusp",period:parsed.period || "all"}
  } catch {
   return defaultGlobalFilters
  }

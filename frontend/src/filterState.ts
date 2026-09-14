@@ -15,7 +15,7 @@ export type FilterKey = keyof GlobalFilters
 export type ActiveFilterEntry = { key: FilterKey; label: string; value: string; limited: boolean }
 
 export const defaultGlobalFilters: GlobalFilters = {
-  source: "historico",
+  source: "sejusp",
   period: "all",
   type: "",
   municipality: "",
@@ -35,23 +35,9 @@ export const filterLabels: Record<FilterKey, string> = {
 }
 
 const sourceLabels: Record<string, string> = {
-  historico: "Histórico consolidado",
   sejusp: "SEJUSP importado",
 }
 
-const historicalPeriodLabels: Record<string, string> = {
-  all: "Jan-Jul/2026",
-  jan: "Jan/2026",
-  fev: "Fev/2026",
-  mar: "Mar/2026",
-  abr: "Abr/2026",
-  mai: "Mai/2026",
-  jun: "Jun/2026",
-  jul: "Jul/2026",
-  q1: "Jan-Mar/2026",
-  q2: "Abr-Jun/2026",
-  last3: "Mai-Jul/2026",
-}
 
 const importedPeriodLabels: Record<string, string> = {
   all: "Todo período importado",
@@ -103,7 +89,7 @@ export function toAnalyticsParams(filters: GlobalFilters): AnalyticsParams {
 
 export function activeFilterCount(filters: GlobalFilters) {
   return [
-    filters.source !== "historico",
+    filters.source !== "sejusp",
     filters.period !== "all",
     Boolean(filters.type),
     Boolean(filters.municipality),
@@ -117,21 +103,20 @@ export function sourceLabel(source: string) {
   return sourceLabels[source] || source
 }
 
-export function periodLabel(period: string, source = "historico") {
-  if (source === "sejusp") return importedPeriodLabels[period] || importedDynamicPeriodLabel(period) || period
-  return historicalPeriodLabels[period] || period
+export function periodLabel(period: string) {
+  return importedPeriodLabels[period] || importedDynamicPeriodLabel(period) || period
 }
 
 export function resetFilterPatch(key: FilterKey): Partial<GlobalFilters> {
-  if (key === "source") return { source: "historico", period: "all", type: "", municipality: "", unit: "", subtype: "", shift: "" }
+  if (key === "source") return { source: "sejusp", period: "all", type: "", municipality: "", unit: "", subtype: "", shift: "" }
   return { [key]: key === "period" ? "all" : "" }
 }
 
 export function activeFilterEntries(filters: GlobalFilters): ActiveFilterEntry[] {
   const detailedSource = filters.source === "sejusp"
   const entries: ActiveFilterEntry[] = [
-    { key: "source", label: filterLabels.source, value: filters.source !== "historico" ? sourceLabel(filters.source) : "", limited: false },
-    { key: "period", label: filterLabels.period, value: filters.period !== "all" ? periodLabel(filters.period, filters.source) : "", limited: false },
+    { key: "source", label: filterLabels.source, value: filters.source !== "sejusp" ? sourceLabel(filters.source) : "", limited: false },
+    { key: "period", label: filterLabels.period, value: filters.period !== "all" ? periodLabel(filters.period) : "", limited: false },
     { key: "type", label: filterLabels.type, value: filters.type, limited: false },
     { key: "municipality", label: filterLabels.municipality, value: filters.municipality, limited: !detailedSource },
     { key: "unit", label: filterLabels.unit, value: filters.unit, limited: !detailedSource },
