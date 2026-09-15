@@ -3,6 +3,7 @@ import json
 from io import BytesIO
 from uuid import uuid4
 from xml.sax.saxutils import escape
+from zoneinfo import ZoneInfo
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from fastapi.testclient import TestClient
@@ -15,6 +16,9 @@ from app.models.occurrence import Occurrence, OccurrenceVehicle
 from app.models.unit import Unit
 from app.models.vehicle import Vehicle
 from app.services import import_audit_service, sejusp_analytics_service
+
+
+FUSO_LOCAL = ZoneInfo("America/Campo_Grande")
 
 
 def _xlsx_bytes(headers: list[str], rows: list[list[str]]) -> bytes:
@@ -591,7 +595,7 @@ def test_analytics_sejusp_source_applies_cross_filters():
             Occurrence(
                 source="RELATORIO_SEJUSP",
                 source_id=source_id,
-                opened_at=datetime(2025, 1, 15, 14, 30, tzinfo=timezone.utc),
+                opened_at=datetime(2025, 1, 15, 14, 30, tzinfo=FUSO_LOCAL),
                 type_name=type_name,
                 group_name="GRUPO ANALYTICS",
                 subtype_name=subtype_name,
@@ -606,7 +610,7 @@ def test_analytics_sejusp_source_applies_cross_filters():
             Occurrence(
                 source="RELATORIO_SEJUSP",
                 source_id=source_id_outro,
-                opened_at=datetime(2025, 1, 16, 8, 30, tzinfo=timezone.utc),
+                opened_at=datetime(2025, 1, 16, 8, 30, tzinfo=FUSO_LOCAL),
                 type_name=other_type_name,
                 group_name="GRUPO ANALYTICS",
                 subtype_name=other_subtype_name,

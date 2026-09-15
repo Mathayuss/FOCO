@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from threading import Lock
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -13,6 +14,7 @@ from app.models.unit import Unit
 SOURCE_SCOPE = "RELATORIO_SEJUSP"
 SOURCE_LABEL = "sejusp_importado"
 FILTER_DIMENSIONS = ["period", "type", "municipality", "unit", "subtype", "shift"]
+LOCAL_TZ = ZoneInfo("America/Campo_Grande")
 MONTH_NAMES = {
     1: "Jan",
     2: "Fev",
@@ -96,6 +98,14 @@ def _dataset_signature(db: Session) -> _DatasetSignature:
     )
 
 
+def _local_datetime(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=LOCAL_TZ)
+    return value.astimezone(LOCAL_TZ)
+
+
 def _load_rows(db: Session) -> list[dict[str, Any]]:
     stmt = (
         select(
@@ -130,6 +140,8 @@ def _load_rows(db: Session) -> list[dict[str, Any]]:
         ibge_code,
         unit_name,
     ) in db.execute(stmt):
+        opened_at = _local_datetime(opened_at)
+        registered_at = _local_datetime(registered_at)
         reference_at = registered_at or opened_at
         rows.append(
             {

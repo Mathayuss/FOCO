@@ -17,6 +17,23 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
+TABELAS_FOCO = set(target_metadata.tables)
+
+
+def incluir_nome(
+    nome: str | None,
+    tipo: str,
+    nomes_pais: dict[str, str | None],
+) -> bool:
+    """Ignora tabelas gerenciadas pelas extensoes PostGIS durante autogeracao."""
+    if tipo == "schema":
+        return nome in {None, "public"}
+    if tipo == "table":
+        return (
+            nomes_pais.get("schema_name") in {None, "public"}
+            and nome in TABELAS_FOCO
+        )
+    return True
 
 
 def executar_migracoes_offline() -> None:
@@ -26,6 +43,7 @@ def executar_migracoes_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         compare_type=True,
+        include_name=incluir_nome,
     )
 
     with context.begin_transaction():
@@ -44,6 +62,7 @@ def executar_migracoes_online() -> None:
             connection=conexao,
             target_metadata=target_metadata,
             compare_type=True,
+            include_name=incluir_nome,
         )
 
         with context.begin_transaction():
