@@ -448,18 +448,92 @@ def filter_metadata(
     }
 
 
-def _comparison(period_label: str, total: int) -> dict[str, Any]:
-    return {
+def _previous_month(pair: tuple[int, int]) -> tuple[int, int]:
+    year, month = pair
+    return (year - 1, 12) if month == 1 else (year, month - 1)
+
+
+def _is_contiguous(pairs: list[tuple[int, int]]) -> bool:
+    return all(_previous_month(current) == previous for previous, current in zip(pairs, pairs[1:]))
+
+
+def _previous_period(pairs: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    previous = []
+    cursor = pairs[0]
+    for _ in pairs:
+        cursor = _previous_month(cursor)
+        previous.append(cursor)
+    return list(reversed(previous))
+
+
+def _comparison(
+    rows: list[dict[str, Any]],
+    selected_period: dict[str, Any],
+    total: int,
+    type_name: str | None = None,
+    municipality: str | None = None,
+    unit: str | None = None,
+    subtype: str | None = None,
+    shift: str | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    summary = {
         "available": False,
-        "current_label": period_label,
+        "current_label": selected_period["label"],
         "baseline_label": None,
         "current_total": total,
         "baseline_total": None,
         "delta_abs": None,
         "delta_pct": None,
-        "reason": "A fonte importada ainda não possui base comparativa cadastrada.",
+        "reason": None,
         "source_scope": SOURCE_LABEL,
     }
+    current_pairs = list(selected_period["period_keys"])
+    if not current_pairs:
+        summary["reason"] = "O recorte atual não possui meses válidos para comparação."
+        return summary, []
+    if not _is_contiguous(current_pairs):
+        summary["reason"] = "O recorte atual possui meses descontínuos e não pode ser comparado."
+        return summary, []
+
+    baseline_pairs = _previous_period(current_pairs)
+    available_pairs = {_row_period_pair(row) for row in rows if row.get("reference_at")}
+    if not set(baseline_pairs).issubset(available_pairs):
+        summary["reason"] = "Não há cobertura completa para o período imediatamente anterior."
+        return summary, []
+
+    comparable_rows = _filtered_rows(
+        rows,
+        type_name=type_name,
+        municipality=municipality,
+        unit=unit,
+        subtype=subtype,
+        shift=shift,
+    )
+    totals = Counter(_row_period_pair(row) for row in comparable_rows)
+    baseline_total = sum(totals[pair] for pair in baseline_pairs)
+    delta_abs = total - baseline_total
+    delta_pct = round(delta_abs / baseline_total * 100, 1) if baseline_total else (0.0 if total == 0 else None)
+    summary.update(
+        {
+            "available": True,
+            "baseline_label": _range_label(baseline_pairs),
+            "baseline_total": baseline_total,
+            "delta_abs": delta_abs,
+            "delta_pct": delta_pct,
+            "reason": None if baseline_total else "A base anterior não possui ocorrências para calcular a variação percentual.",
+        }
+    )
+    points = [
+        {
+            "current_month": _month_label(*current_pair),
+            "baseline_month": _month_label(*baseline_pair),
+            "current": totals[current_pair],
+            "baseline": totals[baseline_pair],
+            "delta": totals[current_pair] - totals[baseline_pair],
+        }
+        for current_pair, baseline_pair in zip(current_pairs, baseline_pairs)
+    ]
+    return summary, points
 
 
 def overview(
@@ -478,11 +552,20 @@ def overview(
     type_items = _metric_items(filtered, "type", total)
     city_items = _metric_items(filtered, "municipality", total)
     selected_period = _period(rows, period)
-    comparison = _comparison(selected_period["label"], total)
+    comparison, _points = _comparison(
+        rows,
+        selected_period,
+        total,
+        type_name,
+        municipality,
+        unit,
+        subtype,
+        shift,
+    )
     return {
         "total": total,
         "average_per_day": round((total / days) if days else 0, 1),
-        "delta_pct": None,
+        "delta_pct": comparison["delta_pct"],
         "comparison": comparison,
         "top_type": type_name or (type_items[0]["nome"] if type_items else ""),
         "top_municipality": municipality or (city_items[0]["nome"] if city_items else ""),
@@ -502,15 +585,26 @@ def monthly(
 ) -> dict[str, Any]:
     rows = _rows(db)
     filtered = _filtered_rows(rows, period, type_name, municipality, unit, subtype, shift)
-    pairs = _period(rows, period)["period_keys"]
+    selected_period = _period(rows, period)
+    pairs = selected_period["period_keys"]
     items = []
     for year, month in pairs:
         month_rows = [row for row in filtered if _row_period_pair(row) == (year, month)]
         total = len(month_rows)
         items.append({"mes": _month_label(year, month), "total": total, "tip": _metric_items(month_rows, "type", total)[:8]})
+    _summary, comparison = _comparison(
+        rows,
+        selected_period,
+        len(filtered),
+        type_name,
+        municipality,
+        unit,
+        subtype,
+        shift,
+    )
     return {
         "items": items,
-        "comparison": [],
+        "comparison": comparison,
         "source_scope": SOURCE_LABEL,
         **filter_metadata(db, period, type_name, municipality, unit, subtype, shift),
     }

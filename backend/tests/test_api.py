@@ -90,6 +90,7 @@ def _cleanup_imported_test_data(source_ids: list[str], unit_names: list[str], ba
         db.commit()
     finally:
         db.close()
+        sejusp_analytics_service.clear_cache()
 
 def test_health():
     with TestClient(app) as client:
@@ -716,6 +717,60 @@ def test_sejusp_analytics_uses_registration_date_year_instead_of_filename():
         _cleanup_imported_test_data([source_id], [unit_name])
 
 
+def test_sejusp_compares_selected_period_with_previous_period():
+    january_id = f"COMPARACAO-JAN-{uuid4()}"
+    february_id = f"COMPARACAO-FEV-{uuid4()}"
+    unit_name = f"UNIDADE COMPARACAO {uuid4()}"
+    type_name = f"TIPO COMPARACAO {uuid4()}"
+    municipality = f"Municipio Comparacao {uuid4()}"
+    batch_id = None
+    content = (
+        "Nº/ANO,DATA DO REGISTRO,HORA DO REGISTRO,DATA DO FATO,HORA DO FATO,FATO,UNIDADE DE ORIGEM,MUNICÍPIO\n"
+        f"{january_id},15/01/2025,10:00,15/01/2025,10:00,{type_name},{unit_name},{municipality}\n"
+        f"{february_id},15/02/2025,10:00,15/02/2025,10:00,{type_name},{unit_name},{municipality}\n"
+    ).encode("utf-8")
+
+    try:
+        with TestClient(app) as client:
+            commit = client.post(
+                "/api/v1/imports",
+                files={"file": ("comparacao_2025.csv", content, "text/csv")},
+            ).json()
+            batch_id = commit["id_lote_importacao"]
+            params = {
+                "source": "sejusp",
+                "period": "2025-02",
+                "type": type_name,
+                "municipality": municipality,
+            }
+            overview = client.get("/api/v1/analytics/overview", params=params).json()
+            monthly = client.get("/api/v1/analytics/monthly", params=params).json()
+
+        comparison = overview["comparison"]
+        assert commit["inserted_rows"] == 2
+        assert comparison["available"] is True
+        assert comparison["current_label"] == "Fev/2025"
+        assert comparison["baseline_label"] == "Jan/2025"
+        assert comparison["current_total"] == 1
+        assert comparison["baseline_total"] == 1
+        assert comparison["delta_abs"] == 0
+        assert comparison["delta_pct"] == 0
+        assert overview["delta_pct"] == 0
+        assert monthly["comparison"] == [{
+            "current_month": "Fev/2025",
+            "baseline_month": "Jan/2025",
+            "current": 1,
+            "baseline": 1,
+            "delta": 0,
+        }]
+    finally:
+        _cleanup_imported_test_data(
+            [january_id, february_id],
+            [unit_name],
+            [batch_id] if batch_id else [],
+        )
+
+
 def test_analytics_exposes_only_sejusp_source():
     with TestClient(app) as client:
         filters = client.get("/api/v1/analytics/filters").json()
@@ -740,7 +795,7 @@ def test_sejusp_comparison_is_explicitly_unavailable():
         comparison = data["comparison"]
         assert comparison["available"] is False
         assert comparison["baseline_total"] is None
-        assert comparison["reason"] == "A fonte importada ainda não possui base comparativa cadastrada."
+        assert comparison["reason"] == "Não há cobertura completa para o período imediatamente anterior."
 
 
 def test_analytics_rejects_invalid_source():
