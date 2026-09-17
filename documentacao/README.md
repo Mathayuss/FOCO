@@ -8,6 +8,7 @@ Esta pasta `documentacao/` concentra a documentação técnica, normativa e oper
 - `agente/`: instruções para agentes de IA e padrões de revisão.
 - `arquitetura/`: arquitetura do sistema, API e contratos técnicos.
 - `dados/`: modelo de dados, dicionários e referências de nomenclatura de dados.
+- `operacao/`: inicializacao, migrations, testes isolados e registros de validacao.
 - `produto/`: roadmap, áreas operacionais, nomenclatura e escopo funcional.
 - `referencias/`: PDFs, manuais, portarias e materiais normativos de apoio.
 - `seguranca/`: diretrizes de segurança e riscos técnicos.
@@ -25,6 +26,13 @@ Esta pasta `documentacao/` concentra a documentação técnica, normativa e oper
 - Identidade visual: `ux-ui/IDENTIDADE_VISUAL.md`
 - Áreas operacionais: `produto/AREAS_OPERACIONAIS.md`
 - Decisões arquiteturais: `adr/`
+
+## Operacao
+
+- [Servico Docker](operacao/SERVICO_DOCKER.md)
+- [Inicializacao com migrations](operacao/INICIALIZACAO_MIGRACOES.md)
+- [Testes isolados](operacao/TESTES_ISOLADOS.md)
+- [Validacao incremental v0.3.1](operacao/VALIDACAO_V0_3_1.md)
 
 ## Observação Sobre Arquivos Importados
 

@@ -40,12 +40,14 @@ source_id
 
 ## 5. Analytics
 ```http
+GET /api/v1/analytics/dashboard
 GET /api/v1/analytics/overview
 GET /api/v1/analytics/monthly
 GET /api/v1/analytics/types
 GET /api/v1/analytics/cities
 GET /api/v1/analytics/hours
 GET /api/v1/analytics/units
+GET /api/v1/analytics/shifts
 GET /api/v1/analytics/filters
 GET /api/v1/analytics/sla
 ```
@@ -66,6 +68,10 @@ shift=<turno>
 A fonte padrão e única `source=sejusp` lê as linhas importadas em `ocorrencia` com `sistema_origem=RELATORIO_SEJUSP`. Nessa fonte, `period`, `type`, `municipality`, `unit`, `subtype` e `shift` são filtros cruzados reais, calculados a partir do banco. O endpoint `/analytics/filters?source=sejusp` aceita os mesmos parâmetros de BI e retorna os valores disponíveis no recorte atual, mantendo o próprio campo selecionado aberto para troca.
 
 
+O endpoint `/analytics/dashboard` retorna `filters`, `overview`, `monthly`, `types`, `cities`, `hours`, `units`, `shifts` e `sla` em uma chamada. Os filtros sao validados uma vez e os paineis SEJUSP reutilizam a mesma leitura de linhas durante a requisicao. Todos os endpoints individuais continuam disponiveis, com respostas equivalentes. O campo `sla` preserva o comportamento global de `/analytics/sla`; ele nao e um indicador calculado sobre os filtros desta chamada.
+
+O frontend cancela o carregamento anterior ao trocar filtros ou sair do painel, e ignora respostas substituidas. O cancelamento no navegador nao garante a interrupcao de um calculo ja iniciado no servidor.
+
 ## 6. Importações
 ```http
 POST /api/v1/imports/preview
@@ -78,7 +84,7 @@ GET /api/v1/imports/lotes/{id_lote_importacao}/rejeicoes
 
 `GET /api/v1/imports/lotes` aceita `limite` e `deslocamento`. As respostas usam campos em português, como `id_lote_importacao`, `nome_arquivo`, `linhas_inseridas`, `linhas_invalidas` e `situacao`.
 
-O preview aceita arquivos CSV, XLS ou XLSX de até 512 MB, com validação de extensão, MIME, nome de arquivo e conteúdo UTF-8 quando CSV. Arquivos XLS podem ser planilhas HTML/TSV exportadas por sistemas legados ou XLS binário antigo quando a dependência `xlrd` estiver instalada. O parser detecta `;`, tabulação, vírgula e `|`, localiza a linha real de cabeçalho quando houver título acima da tabela e limpa marcações como `<br>` nos nomes das colunas.
+O preview aceita arquivos CSV, XLS ou XLSX de até 50 MB por padrão, com limite configurável por `LIMITE_IMPORTACAO_MB` e `VITE_LIMITE_IMPORTACAO_MB`, além de validação de extensão, MIME, nome de arquivo e conteúdo UTF-8 quando CSV. Arquivos XLS podem ser planilhas HTML/TSV exportadas por sistemas legados ou XLS binário antigo quando a dependência `xlrd` estiver instalada. O parser detecta `;`, tabulação, vírgula e `|`, localiza a linha real de cabeçalho quando houver título acima da tabela e limpa marcações como `<br>` nos nomes das colunas.
 Cabeçalhos canônicos obrigatórios: `id_origem`, `abertura_em`, `municipio` e `tipo`.
 Cabeçalhos opcionais reconhecidos para persistência normalizada: `grupo`, `subtipo`, `unidade_operacional`, `bairro`, `endereco`, `registro_em`, `codigo_ibge`, `segredo_de_justica`, `latitude`, `longitude`, `codigo_viatura`, `tipo_viatura`, `despacho_em`, `saida_em`, `chegada_em`, `liberacao_em`, `retorno_em` e `disponibilidade_em`.
 Cabeçalhos auxiliares reconhecidos para auditoria/rastreabilidade no preview e preservados em `dados_origem`: `forca`, `movimentacao`, `autoria`, `motivacao`, `uf_origem`, `municipio_origem`, `dia_registro`, `periodo_registro`, `faixa_idade`, `local`, `uf` e `area_municipio`.

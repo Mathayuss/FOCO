@@ -10,6 +10,7 @@ export type MonthlyItem = { mes:string; total:number|null; tip:NamedMetric[] }
 export type ApiList<T> = Partial<FilterMetadata> & { items:T[]; source_scope:string }
 export type MonthlyComparison = { current_month:string; baseline_month:string; current:number; baseline:number; delta:number }
 export type MonthlyResponse = FilterMetadata & { items:MonthlyItem[]; comparison:MonthlyComparison[]; source_scope:string }
+export type DashboardResponse = { filters:AvailableFilters; overview:Overview; sla:Sla; monthly:MonthlyResponse; types:ApiList<NamedMetric>; cities:ApiList<NamedMetric>; hours:ApiList<number>; units:ApiList<NamedMetric>; shifts:ApiList<NamedMetric> }
 export type SourceOption = { key:string; label:string }
 export type AvailableFilters = { periods:PeriodOption[]; types:string[]; municipalities:string[]; units:string[]; subtypes:string[]; shifts:string[]; filterable_dimensions:string[]; limited_dimensions:string[]; source_scope:string; sources?:SourceOption[] }
 export type CsvIssue = { row:number; issues:string[] }

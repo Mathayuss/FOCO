@@ -1,6 +1,6 @@
-import type { ApiList, AvailableFilters, CsvPreview, ImportBatchList, ImportCommit, MonthlyResponse, NamedMetric, Overview, Sla } from "./types"
+import type { ApiList, AvailableFilters, DashboardResponse, CsvPreview, ImportBatchList, ImportCommit, MonthlyResponse, NamedMetric, Overview, Sla } from "./types"
 
-export type HealthStatus = { status:string; service:string }
+export type HealthStatus = { status:string; service:string; database:"ok" }
 
 const configuredBase = import.meta.env.VITE_API_URL as string | undefined
 const runtimeBase = `${window.location.protocol}//${window.location.hostname}:8000/api/v1`
@@ -80,11 +80,12 @@ async function request<T>(path:string, init?:RequestInit):Promise<T>{
   return r.json()
 }
 
-function get<T>(path:string, params?:QueryParams){ return request<T>(withParams(path, params)) }
+function get<T>(path:string, params?:QueryParams, signal?:AbortSignal){ return request<T>(withParams(path, params), {signal}) }
 function postForm<T>(path:string, body:FormData){ return request<T>(path, {method:"POST", body}) }
 
 export const api={
   health:()=>get<HealthStatus>("/health"),
+  dashboard:(params?:AnalyticsParams, signal?:AbortSignal)=>get<DashboardResponse>("/analytics/dashboard", params, signal),
   overview:(params?:AnalyticsParams)=>get<Overview>("/analytics/overview", params),
   monthly:(params?:AnalyticsParams)=>get<MonthlyResponse>("/analytics/monthly", params),
   types:(params?:AnalyticsParams)=>get<ApiList<NamedMetric>>("/analytics/types", params),

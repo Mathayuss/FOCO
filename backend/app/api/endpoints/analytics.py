@@ -2,14 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.schemas.analytics import OverviewResponse, SlaResponse
-from app.services import sejusp_analytics_service
+from app.schemas.dashboard import DashboardResponse
+from app.services import dashboard_service, sejusp_analytics_service
 from app.services.sla_service import calculate
 
 router = APIRouter(prefix="/analytics", tags=["análises"])
 VALID_SOURCES = {"sejusp"}
-SOURCE_OPTIONS = [
-    {"key": "sejusp", "label": "SEJUSP importado"},
-]
 
 
 def _invalid_source(source_key: str):
@@ -46,7 +44,7 @@ def filters(
         "source": source_key,
         "db": db,
     }
-    if source_key == "sejusp":
+    with sejusp_analytics_service.dataset_snapshot(db):
         errors = sejusp_analytics_service.validate_filter_params(
             db,
             period=period,
@@ -56,14 +54,20 @@ def filters(
             subtype=subtype,
             shift=shift,
         )
-    if errors:
-        raise HTTPException(status_code=400, detail={"code": "INVALID_FILTER", "errors": errors})
-    return params
+        if errors:
+            raise HTTPException(status_code=400, detail={"code": "INVALID_FILTER", "errors": errors})
+        yield params
 
 
 def _dispatch(params: dict, name: str):
     values = {key: value for key, value in params.items() if key not in {"source", "db"}}
     return getattr(sejusp_analytics_service, name)(params["db"], **values)
+
+
+@router.get("/dashboard", response_model=DashboardResponse, response_model_exclude_unset=True)
+def dashboard(params: dict = Depends(filters)):
+    values = {key: value for key, value in params.items() if key not in {"source", "db"}}
+    return dashboard_service.snapshot(params["db"], **values)
 
 
 @router.get("/overview", response_model=OverviewResponse)
@@ -102,61 +106,8 @@ def shifts(params: dict = Depends(filters)):
 
 
 @router.get("/filters")
-def available_filters(
-    period: str | None = Query(default="all"),
-    type: str | None = Query(default=None),
-    municipality: str | None = Query(default=None),
-    unit: str | None = Query(default=None),
-    subtype: str | None = Query(default=None),
-    shift: str | None = Query(default=None),
-    source: str | None = Query(default="sejusp"),
-    fonte: str | None = Query(default=None),
-    db: Session = Depends(get_db),
-):
-    source_key = fonte or source or "sejusp"
-    if source_key not in VALID_SOURCES:
-        raise _invalid_source(source_key)
-    if source_key == "sejusp":
-        errors = sejusp_analytics_service.validate_filter_params(
-            db,
-            period=period,
-            type_name=type,
-            municipality=municipality,
-            unit=unit,
-            subtype=subtype,
-            shift=shift,
-        )
-        if errors:
-            raise HTTPException(status_code=400, detail={"code": "INVALID_FILTER", "errors": errors})
-        values = sejusp_analytics_service.available_filter_values(
-            db,
-            period=period,
-            type_name=type,
-            municipality=municipality,
-            unit=unit,
-            subtype=subtype,
-            shift=shift,
-        )
-        return {
-            "periods": sejusp_analytics_service.period_options(
-                db,
-                period=period,
-                type_name=type,
-                municipality=municipality,
-                unit=unit,
-                subtype=subtype,
-                shift=shift,
-            ),
-            "types": values["types"],
-            "municipalities": values["municipalities"],
-            "units": values["units"],
-            "subtypes": values["subtypes"],
-            "shifts": values["shifts"],
-            "filterable_dimensions": ["period", "type", "municipality", "unit", "subtype", "shift"],
-            "limited_dimensions": [],
-            "source_scope": "sejusp_importado",
-            "sources": SOURCE_OPTIONS,
-        }
+def available_filters(params: dict = Depends(filters)):
+    return _dispatch(params, "filter_options")
 
 
 @router.get("/sla", response_model=SlaResponse)

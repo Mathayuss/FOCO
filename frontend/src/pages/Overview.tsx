@@ -44,12 +44,13 @@ export default function Overview({globalFilters,setGlobalFilters,clearGlobalFilt
  const params=useMemo(()=>toAnalyticsParams(globalFilters),[source,period,typeFilter,municipality,unit,subtype,shift])
  useEffect(()=>{
   let alive=true
+  const controller=new AbortController()
   setLoading(true); setError("")
-  Promise.all([api.filters(params),api.overview(params),api.sla(),api.monthly(params),api.types(params),api.cities(params),api.hours(params),api.units(params)])
-   .then(([available,a,b,c,d,e,f,g])=>{if(!alive)return;setFilters(available);setOv(a);setSla(b);setMonths(c.items);setComparison(c.comparison);setTypes(d.items);setCities(e.items);setHours(f.items);setUnits(g.items)})
+  api.dashboard(params,controller.signal)
+   .then(data=>{if(!alive)return;setFilters(data.filters);setOv(data.overview);setSla(data.sla);setMonths(data.monthly.items);setComparison(data.monthly.comparison);setTypes(data.types.items);setCities(data.cities.items);setHours(data.hours.items);setUnits(data.units.items)})
    .catch((err)=>{if(alive)setError(err instanceof ApiError ? err.message : "Não foi possível acessar a API. Verifique se o backend está ativo.")})
    .finally(()=>{if(alive)setLoading(false)})
-  return ()=>{alive=false}
+  return ()=>{alive=false;controller.abort()}
  },[params])
  const periodOptions=filters?.periods.length?filters.periods:fallbackPeriods
  const typeOptions=filters?.types.length?filters.types:types.map(item=>item.nome)

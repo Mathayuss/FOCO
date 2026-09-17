@@ -1,4 +1,5 @@
 from collections import Counter, defaultdict
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from threading import Lock
@@ -68,6 +69,7 @@ class _DatasetSignature:
 _CACHE_LOCK = Lock()
 _CACHE_SIGNATURE: _DatasetSignature | None = None
 _CACHE_ROWS: list[dict[str, Any]] | None = None
+_SNAPSHOT_ROWS_KEY = "foco_analytics_snapshot"
 
 
 def clear_cache() -> None:
@@ -167,6 +169,9 @@ def _load_rows(db: Session) -> list[dict[str, Any]]:
 def _rows(db: Session) -> list[dict[str, Any]]:
     global _CACHE_SIGNATURE, _CACHE_ROWS
 
+    if _SNAPSHOT_ROWS_KEY in db.info:
+        return db.info[_SNAPSHOT_ROWS_KEY]
+
     signature = _dataset_signature(db)
     with _CACHE_LOCK:
         if _CACHE_SIGNATURE == signature and _CACHE_ROWS is not None:
@@ -177,6 +182,18 @@ def _rows(db: Session) -> list[dict[str, Any]]:
         _CACHE_SIGNATURE = signature
         _CACHE_ROWS = rows
     return list(rows)
+
+
+@contextmanager
+def dataset_snapshot(db: Session):
+    if _SNAPSHOT_ROWS_KEY in db.info:
+        yield
+        return
+    db.info[_SNAPSHOT_ROWS_KEY] = _rows(db)
+    try:
+        yield
+    finally:
+        db.info.pop(_SNAPSHOT_ROWS_KEY, None)
 
 
 def _shift_for(opened_at: datetime | None) -> str | None:
@@ -661,3 +678,19 @@ def units(db: Session, unit: str | None = None, **filters: str | None) -> dict[s
 def shifts(db: Session, shift: str | None = None, **filters: str | None) -> dict[str, Any]:
     filtered = _filtered_rows(_rows(db), shift=shift, **filters)
     return {"items": _metric_items(filtered, "shift", len(filtered)), "source_scope": SOURCE_LABEL, **filter_metadata(db, shift=shift, **filters)}
+
+
+def filter_options(db: Session, **filters: str | None) -> dict[str, Any]:
+    values = available_filter_values(db, **filters)
+    return {
+        "periods": period_options(db, **filters),
+        "types": values["types"],
+        "municipalities": values["municipalities"],
+        "units": values["units"],
+        "subtypes": values["subtypes"],
+        "shifts": values["shifts"],
+        "filterable_dimensions": FILTER_DIMENSIONS,
+        "limited_dimensions": [],
+        "source_scope": SOURCE_LABEL,
+        "sources": [{"key": "sejusp", "label": "SEJUSP importado"}],
+    }

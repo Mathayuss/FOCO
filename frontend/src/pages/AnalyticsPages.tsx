@@ -40,11 +40,12 @@ function useSnapshot(params:AnalyticsParams={}){
  const [state,setState]=useState<Snapshot>({loading:true,error:"",filters:null,overview:null,sla:null,monthly:[],comparison:[],types:null,cities:null,hours:null,units:null,shifts:null})
  useEffect(()=>{
   let alive=true
+  const controller=new AbortController()
   setState(prev=>({...prev,loading:true,error:""}))
-  Promise.all([api.filters(params),api.overview(params),api.sla(),api.monthly(params),api.types(params),api.cities(params),api.hours(params),api.units(params),api.shifts(params)])
-   .then(([filters,overview,sla,monthly,types,cities,hours,units,shifts])=>{if(alive)setState({loading:false,error:"",filters,overview,sla,monthly:monthly.items,comparison:monthly.comparison,types,cities,hours,units,shifts})})
+  api.dashboard(params,controller.signal)
+   .then(({filters,overview,sla,monthly,types,cities,hours,units,shifts})=>{if(alive)setState({loading:false,error:"",filters,overview,sla,monthly:monthly.items,comparison:monthly.comparison,types,cities,hours,units,shifts})})
    .catch((err)=>{if(alive)setState(prev=>({...prev,loading:false,error:err instanceof ApiError ? err.message : "Não foi possível acessar a API. Verifique se o backend está ativo."}))})
-  return ()=>{alive=false}
+  return ()=>{alive=false;controller.abort()}
  },[params.source,params.period,params.type,params.municipality,params.unit,params.subtype,params.shift])
  return state
 }
