@@ -29,16 +29,39 @@ A migração `20260908_0003_lote_legado_sejusp.py` cria um lote legado para ocor
 
 ## Passo 1 — aplicar a migração
 
+Com o banco local em Docker, copie o ambiente e suba somente o serviço de banco:
+
+```bash
+cp .env.example .env
+docker compose up -d bd
+```
+
+Para executar o Alembic contra o PostgreSQL do Compose, rode o comando a partir do
+container do backend ou use um ambiente que consiga resolver o host `bd`:
+
 ```bash
 cd backend
 alembic upgrade head
 ```
+
+Em desenvolvimento local com SQLite, o comando deve ser executado dentro de
+`backend/`, usando o `DATABASE_URL` padrão do projeto.
 
 ## Passo 2 — validar alinhamento com os modelos
 
 ```bash
 alembic check
 ```
+
+Se o banco já tiver sido criado pelo startup legado, confira primeiro a revisão
+aplicada:
+
+```bash
+alembic current
+```
+
+Não execute `alembic downgrade` em um banco com dados sem revisar previamente o
+impacto de cada migration.
 
 ## Passo 3 — executar testes
 

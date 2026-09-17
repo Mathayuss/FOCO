@@ -1,0 +1,31 @@
+name: foco-testes
+
+services:
+  bd-testes:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: foco_testes
+      POSTGRES_DB: foco_testes
+      # Rede exclusiva, sem portas publicadas e sem dados persistentes.
+      POSTGRES_HOST_AUTH_METHOD: trust
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U foco_testes -d foco_testes"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  testes:
+    image: foco-servidor
+    build: ./backend
+    depends_on:
+      bd-testes:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app:ro
+    command: python -m pytest --postgres-testes -q
+
+networks:
+  default:
+    internal: true

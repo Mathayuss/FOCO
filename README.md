@@ -1,16 +1,38 @@
 # FOCO - Ferramenta Operacional de Consolidacao de Ocorrencias
 
-MVP com backend FastAPI e frontend React/Vite para dashboard de ocorrencias. A v0.3 prioriza BI funcional com Visao Geral, Evolucao, Tipificacao, Temporal, Territorio, Unidades, Qualidade, filtros globais persistidos, filtros por periodo e tipificacao via API, filtros dimensionais consolidados, comparativo temporal 2025 x 2026, SLA demonstrativo identificado como demo e preview seguro de importacao CSV.
+MVP com backend FastAPI e frontend React/Vite para dashboard de ocorrencias. A v0.3 prioriza BI funcional com Visao Geral, Evolucao, Tipificacao, Temporal, Territorio, Unidades, Qualidade, filtros globais persistidos e cruzados, comparacao entre periodos e importacao CSV/XLS/XLSX. Os paineis usam apenas dados SEJUSP importados, sem dados demonstrativos ou historicos consolidados.
 
 ## Rodando localmente
 
-Backend:
+Primeiro, copie o exemplo de ambiente:
+
+```bash
+cp .env.example .env
+```
+
+Atalhos a partir da raiz do repositório:
+
+```bash
+pnpm run backend:dev
+pnpm run frontend:dev
+pnpm run test
+pnpm run build
+```
+
+Backend local (SQLite, para desenvolvimento leve):
 
 ```bash
 cd backend
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
+.venv/bin/python -m alembic upgrade head
 .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Docker completo com PostgreSQL/PostGIS:
+
+```bash
+docker compose up --build
 ```
 
 Frontend:
@@ -34,8 +56,19 @@ cd backend
 .venv/bin/pytest -q
 ```
 
-Observacao: executar o backend a partir de `backend/` usa SQLite local. Executar pela raiz le `./.env`, que aponta para PostgreSQL no servico Docker `db`.
+Observacao: executar o backend a partir de `backend/` usa SQLite local. Executar pela raiz com `docker compose` usa `./.env` e aponta para o PostgreSQL/PostGIS do servico `bd`.
 
+
+Os testes usam bancos descartaveis, sem herdar a conexao operacional. Para validar no PostgreSQL/PostGIS:
+
+```bash
+docker compose -f compose.testes.yml up --abort-on-container-exit --exit-code-from testes
+docker compose -f compose.testes.yml down
+```
+
+Consulte [testes isolados](documentacao/operacao/TESTES_ISOLADOS.md),
+[inicializacao com migrations](documentacao/operacao/INICIALIZACAO_MIGRACOES.md)
+e [servico Docker](documentacao/operacao/SERVICO_DOCKER.md).
 
 ## Estrutura do projeto
 

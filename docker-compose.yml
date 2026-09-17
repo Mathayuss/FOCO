@@ -1,6 +1,7 @@
 services:
   bd:
     image: postgis/postgis:16-3.4
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${BD_USUARIO:-foco}
       POSTGRES_PASSWORD: ${BD_SENHA:-foco_desenvolvimento}
@@ -21,6 +22,7 @@ services:
 
   servidor:
     build: ./backend
+    restart: unless-stopped
     env_file:
       - .env
     depends_on:
@@ -30,13 +32,27 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   interface:
     build: ./frontend
+    restart: unless-stopped
     environment:
       VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api/v1}
+      VITE_LIMITE_IMPORTACAO_MB: ${VITE_LIMITE_IMPORTACAO_MB:-50}
     depends_on:
-      - servidor
+      servidor:
+        condition: service_healthy
     ports:
       - "5173:5173"
     volumes:

@@ -1,13 +1,15 @@
 from datetime import datetime, timezone
+import importlib.util
 import json
 from io import BytesIO
+from pathlib import Path
 from uuid import uuid4
 from xml.sax.saxutils import escape
 from zoneinfo import ZoneInfo
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, select
+from sqlalchemy import create_engine, delete, select, text
 from app.main import app
 from app.api.endpoints import imports as imports_endpoint
 from app.db.session import SessionLocal
@@ -97,6 +99,7 @@ def test_health():
         r = client.get("/api/v1/health")
         assert r.status_code == 200
         assert r.json()["status"] == "ok"
+        assert r.json()["database"] == "ok"
 
 
 def test_overview_defaults_to_sejusp_scope():
@@ -216,9 +219,29 @@ def test_startup_does_not_create_demo_rows():
             db.close()
 
 
+def test_migration_0005_is_idempotent_when_indexes_already_exist():
+    migration_path = Path(__file__).resolve().parents[1] / "migracoes" / "versoes" / "20260914_0005_alinha_indices_e_chave_lote.py"
+    spec = importlib.util.spec_from_file_location("migration_0005", migration_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE lote_importacao (id_lote_importacao INTEGER PRIMARY KEY)"))
+        conn.execute(text("CREATE TABLE ocorrencia (id_ocorrencia INTEGER PRIMARY KEY, id_lote_importacao INTEGER, id_unidade_operacional INTEGER)"))
+        conn.execute(text("CREATE INDEX ix_ocorrencia_id_lote_importacao ON ocorrencia (id_lote_importacao)"))
+
+        assert module._index_exists(conn, "ocorrencia", "ix_ocorrencia_id_lote_importacao") is True
+        assert module._index_exists(conn, "ocorrencia", "ix_ocorrencia_id_unidade_operacional") is False
+
+        module._ensure_index(conn, "ocorrencia", "ix_ocorrencia_id_unidade_operacional", ["id_unidade_operacional"])
+        assert module._index_exists(conn, "ocorrencia", "ix_ocorrencia_id_unidade_operacional") is True
+
+
 def test_csv_preview_accepts_sample_file():
     with TestClient(app) as client:
-        with open("sample_import.csv", "rb") as sample:
+        with (Path(__file__).resolve().parents[1] / "sample_import.csv").open("rb") as sample:
             r = client.post(
                 "/api/v1/imports/csv/preview",
                 files={"file": ("sample_import.csv", sample, "text/csv")},
@@ -790,12 +813,29 @@ def test_analytics_rejects_removed_historical_source():
 
 
 def test_sejusp_comparison_is_explicitly_unavailable():
+    with SessionLocal() as db:
+        db.add(Occurrence(
+            source="RELATORIO_SEJUSP",
+            source_id="COMPARACAO-SEM-BASE",
+            opened_at=datetime(2025, 2, 15, 10, tzinfo=FUSO_LOCAL),
+            type_name="TIPO TESTE",
+            municipality="MUNICIPIO TESTE",
+        ))
+        db.commit()
     with TestClient(app) as client:
         data = client.get("/api/v1/analytics/overview").json()
         comparison = data["comparison"]
         assert comparison["available"] is False
         assert comparison["baseline_total"] is None
         assert comparison["reason"] == "Não há cobertura completa para o período imediatamente anterior."
+
+
+def test_empty_database_returns_empty_dashboard():
+    with TestClient(app) as client:
+        data = client.get("/api/v1/analytics/overview").json()
+        assert data["total"] == 0
+        assert data["comparison"]["available"] is False
+        assert data["comparison"]["reason"] == "O recorte atual não possui meses válidos para comparação."
 
 
 def test_analytics_rejects_invalid_source():
@@ -864,11 +904,11 @@ def test_csv_preview_rejects_empty_file():
         assert r.json()["detail"] == "Arquivo vazio"
 
 
-def test_import_upload_limit_is_512_mb():
-    assert imports_endpoint.MAX_IMPORT_MEGABYTES == 512
-    assert imports_endpoint.MAX_IMPORT_BYTES == 512 * 1024 * 1024
-    assert imports_endpoint.MAX_CSV_MEGABYTES == 512
-    assert imports_endpoint.MAX_CSV_BYTES == 512 * 1024 * 1024
+def test_import_upload_limit_is_50_mb():
+    assert imports_endpoint.MAX_IMPORT_MEGABYTES == 50
+    assert imports_endpoint.MAX_IMPORT_BYTES == 50 * 1024 * 1024
+    assert imports_endpoint.MAX_CSV_MEGABYTES == 50
+    assert imports_endpoint.MAX_CSV_BYTES == 50 * 1024 * 1024
 
 
 def test_csv_preview_rejects_large_file(monkeypatch):

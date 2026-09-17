@@ -41,9 +41,9 @@ function loadActivePage(){
 }
 
 function apiStatusLabel(status:ApiStatus){
- if(status === "online") return "API online"
- if(status === "offline") return "API offline"
- return "Verificando API"
+ if(status === "online") return "API e banco online"
+ if(status === "offline") return "API ou banco offline"
+ return "Verificando API e banco"
 }
 
 export default function App(){

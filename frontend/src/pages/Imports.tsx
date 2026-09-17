@@ -5,8 +5,9 @@ import type { CsvPreview, ImportBatch, ImportCommit } from "../types"
 
 const pct=(part:number,total:number)=>total?`${Math.round(part/total*100)}%`:"0%"
 const dateTime=(value:string|null)=>value?new Date(value).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"}):"-"
-const MAX_IMPORT_UPLOAD_MB=512
-const MAX_IMPORT_UPLOAD_BYTES=MAX_IMPORT_UPLOAD_MB*1024*1024
+const limiteImportacaoConfigurado=Number(import.meta.env.VITE_LIMITE_IMPORTACAO_MB)
+const limiteImportacaoMb=Number.isInteger(limiteImportacaoConfigurado) && limiteImportacaoConfigurado>0 ? limiteImportacaoConfigurado : 50
+const limiteImportacaoBytes=limiteImportacaoMb*1024*1024
 const SEJUSP_DASHBOARD_FILTERS = {source:"sejusp",period:"all",type:"",municipality:"",unit:"",subtype:"",shift:""}
 const yearList=(years?:number[])=>years?.length?years.join(", "):"-"
 const dashboardPeriod=(years?:number[])=>years?.length===1?`ano-${years[0]}`:"all"
@@ -46,8 +47,8 @@ export default function Imports({setGlobalFilters,onShowDashboard}:ImportsProps)
  async function handleFile(next:File|null){
   setFile(next); setPreview(null); setCommit(null); setDashboardReady(false); setError("")
   if(!next) return
-  if(next.size>MAX_IMPORT_UPLOAD_BYTES){
-   setError(`Arquivo excede o limite de ${MAX_IMPORT_UPLOAD_MB} MB`)
+    if(next.size>limiteImportacaoBytes){
+     setError(`Arquivo excede o limite de ${limiteImportacaoMb} MB`)
    return
   }
   setLoading(true)
@@ -86,7 +87,7 @@ export default function Imports({setGlobalFilters,onShowDashboard}:ImportsProps)
      <input type="file" accept=".csv,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={e=>handleFile(e.target.files?.[0]||null)}/>
      <span className="dropIcon">ARQ</span>
      <b>{file?.name || "Selecionar CSV/XLS/XLSX de ocorrências"}</b>
-     <small>{file ? `${(file.size/1024).toFixed(1).replace(".",",")} KB` : `FOCO ou relatório SEJUSP · limite ${MAX_IMPORT_UPLOAD_MB} MB`}</small>
+    <small>{file ? `${(file.size/1024).toFixed(1).replace(".",",")} KB` : `FOCO ou relatório SEJUSP · limite ${limiteImportacaoMb} MB`}</small>
     </label>
     {error && <div className="errorBox">{error}</div>}
     <div className="importNote"><b>Escopo atual</b><span>Preview, equivalência de colunas, regras mínimas, duplicidade e insert das linhas válidas.</span></div>

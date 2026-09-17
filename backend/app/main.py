@@ -5,9 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.core.config import get_settings
-from app.db.base import Base
 from app.db.session import SessionLocal, engine
-from app.db.schema import garantir_colunas_incrementais
+from app.db.migrations import validar_migracoes
 from app.services import import_audit_service
 import app.models  # noqa: F401
 
@@ -17,12 +16,7 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # TRANSIÇÃO v0.3.1:
-    # create_all/garantir_colunas_incrementais permanecem temporariamente
-    # para não quebrar bancos de desenvolvimento existentes.
-    # Após gerar e homologar a primeira migration Alembic, remover ambos.
-    Base.metadata.create_all(bind=engine)
-    garantir_colunas_incrementais(engine)
+    validar_migracoes(engine)
 
     db = SessionLocal()
     try:

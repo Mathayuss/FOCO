@@ -1,5 +1,12 @@
 {
   "name": "foco",
   "private": true,
-  "workspaces": ["frontend"]
+  "version": "0.3.1",
+  "packageManager": "pnpm@9.15.5",
+  "scripts": {
+    "backend:dev": "cd backend && .venv/bin/python -m alembic upgrade head && .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000",
+    "frontend:dev": "cd frontend && COREPACK_ENABLE_PROJECT_SPEC=0 pnpm install --frozen-lockfile && COREPACK_ENABLE_PROJECT_SPEC=0 pnpm run dev --host 0.0.0.0",
+    "build": "cd frontend && COREPACK_ENABLE_PROJECT_SPEC=0 pnpm install --frozen-lockfile && COREPACK_ENABLE_PROJECT_SPEC=0 pnpm run build",
+    "test": "cd backend && .venv/bin/python -m pytest -q"
+  }
 }

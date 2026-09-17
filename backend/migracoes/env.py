@@ -50,7 +50,24 @@ def executar_migracoes_offline() -> None:
         context.run_migrations()
 
 
+def executar_migracoes_conexao(conexao) -> None:
+    context.configure(
+        connection=conexao,
+        target_metadata=target_metadata,
+        compare_type=True,
+        include_name=incluir_nome,
+    )
+
+    with context.begin_transaction():
+        context.run_migrations()
+
+
 def executar_migracoes_online() -> None:
+    conexao = config.attributes.get("connection")
+    if conexao is not None:
+        executar_migracoes_conexao(conexao)
+        return
+
     conectavel = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
@@ -58,15 +75,7 @@ def executar_migracoes_online() -> None:
     )
 
     with conectavel.connect() as conexao:
-        context.configure(
-            connection=conexao,
-            target_metadata=target_metadata,
-            compare_type=True,
-            include_name=incluir_nome,
-        )
-
-        with context.begin_transaction():
-            context.run_migrations()
+        executar_migracoes_conexao(conexao)
 
 
 if context.is_offline_mode():

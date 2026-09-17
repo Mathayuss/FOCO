@@ -15,4 +15,4 @@ RUN chown -R foco:foco /app
 
 USER foco
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "iniciar.sh"]
