@@ -81,7 +81,32 @@ async function request<T>(path:string, init?:RequestInit):Promise<T>{
 }
 
 function get<T>(path:string, params?:QueryParams, signal?:AbortSignal){ return request<T>(withParams(path, params), {signal}) }
-function postForm<T>(path:string, body:FormData){ return request<T>(path, {method:"POST", body}) }
+type UploadProgressCallback = (percent:number) => void
+
+function postForm<T>(path:string, body:FormData, onProgress?:UploadProgressCallback):Promise<T>{
+  return new Promise((resolve,reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open("POST",`${BASE}${path}`)
+    xhr.responseType="json"
+    xhr.upload.onprogress = event => {
+      if(event.lengthComputable && event.total > 0){
+        onProgress?.(Math.min(100,Math.round(event.loaded/event.total*100)))
+      }
+    }
+    xhr.upload.onload = () => onProgress?.(100)
+    xhr.onerror = () => reject(new Error("Não foi possível acessar a API. Verifique se o backend está ativo."))
+    xhr.onabort = () => reject(new Error("Envio cancelado"))
+    xhr.onload = () => {
+      const body = xhr.response as ({detail?:unknown} & T) | null
+      if(xhr.status >= 200 && xhr.status < 300){
+        resolve(body as T)
+        return
+      }
+      reject(new ApiError(xhr.status,body?.detail ?? String(xhr.status)))
+    }
+    xhr.send(body)
+  })
+}
 
 export const api={
   health:()=>get<HealthStatus>("/health"),
@@ -96,14 +121,14 @@ export const api={
   filters:(params?:AnalyticsParams)=>get<AvailableFilters>("/analytics/filters", params),
   sla:()=>get<Sla>("/analytics/sla"),
   importBatches:(params?:{limite?:number; deslocamento?:number})=>get<ImportBatchList>("/imports/lotes", params),
-  previewCsv:(file:File)=>{
+  previewCsv:(file:File,onProgress?:UploadProgressCallback)=>{
     const body = new FormData()
     body.append("file", file)
-    return postForm<CsvPreview>("/imports/preview", body)
+    return postForm<CsvPreview>("/imports/preview", body, onProgress)
   },
-  commitImport:(file:File)=>{
+  commitImport:(file:File,onProgress?:UploadProgressCallback)=>{
     const body = new FormData()
     body.append("file", file)
-    return postForm<ImportCommit>("/imports", body)
+    return postForm<ImportCommit>("/imports", body, onProgress)
   },
 }

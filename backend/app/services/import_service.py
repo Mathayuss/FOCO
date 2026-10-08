@@ -1,18 +1,22 @@
+import codecs
 import csv
 import hashlib
 import io
 import json
 from html import unescape
 from html.parser import HTMLParser
+import math
 import re
 import unicodedata
 import zipfile
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from itertools import chain, islice
+from typing import BinaryIO, Iterable, Iterator
 from zoneinfo import ZoneInfo
 from xml.etree import ElementTree as ET
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.import_batch import ImportBatch, RejectedImportLine
@@ -24,6 +28,32 @@ LOCAL_TZ = ZoneInfo("America/Campo_Grande")
 EXCEL_EPOCH = datetime(1899, 12, 30, tzinfo=LOCAL_TZ)
 SISTEMA_ORIGEM_SEJUSP = "RELATORIO_SEJUSP"
 SISTEMA_ORIGEM_FOCO = "FOCO_IMPORTACAO"
+
+SOURCE_ROW_NUMBER_KEY = "__numero_linha_foco__"
+SOURCE_ROW_ISSUES_KEY = "__problemas_linha_foco__"
+MAX_IMPORT_COLUMNS = 200
+MAX_XLSX_UNCOMPRESSED_BYTES = 1024 * 1024 * 1024
+MAX_XLSX_COMPRESSION_RATIO = 500
+MIN_SUPPORTED_YEAR = 1900
+MAX_SUPPORTED_YEAR = 2100
+IMPORT_TRANSACTION_LOCK_ID = 0x464F434F
+CSV_ENCODING_ERROR = "CSV deve estar em UTF-8 ou Windows-1252"
+
+
+class ImportInProgressError(RuntimeError):
+    pass
+
+
+FIELD_MAX_LENGTHS = {
+    "id_origem": 120,
+    "municipio": 160,
+    "tipo": 500,
+    "grupo": 120,
+    "subtipo": 500,
+    "unidade_operacional": 160,
+    "bairro": 160,
+    "codigo_ibge": 20,
+}
 
 CANONICAL_COLUMNS = {
     "id_origem",
@@ -60,6 +90,9 @@ AUXILIARY_COLUMNS = {
     "movimentacao",
     "municipio_origem",
     "periodo_registro",
+    "tempo_atendimento",
+    "despacho",
+    "especial",
     "uf",
     "uf_origem",
 }
@@ -115,6 +148,9 @@ HEADER_ALIASES_RAW = {
     "AREA DO MUNICIPIO": "area_municipio",
     "FORÇA": "forca",
     "FORCA": "forca",
+    "TEMPO DE ATENDIMENTO": "tempo_atendimento",
+    "DESPACHO": "despacho",
+    "ESPECIAL": "especial",
     "MOVIMENTAÇÃO": "movimentacao",
     "MOVIMENTACAO": "movimentacao",
     "UF": "uf",
@@ -249,28 +285,49 @@ def _first_sheet_path(zf: zipfile.ZipFile) -> str:
     return target if target.startswith("xl/") else "xl/" + target.lstrip("/")
 
 
+def _validate_xlsx_archive(zf: zipfile.ZipFile) -> None:
+    names = set(zf.namelist())
+    required = {"xl/workbook.xml", "xl/_rels/workbook.xml.rels"}
+    if not required.issubset(names) or not any(name.startswith("xl/worksheets/") for name in names):
+        raise ValueError("Arquivo XLSX inválido ou corrompido")
+
+    total_uncompressed = sum(item.file_size for item in zf.infolist())
+    if total_uncompressed > MAX_XLSX_UNCOMPRESSED_BYTES:
+        raise ValueError("Arquivo XLSX excede o limite seguro de conteúdo descompactado")
+    for item in zf.infolist():
+        compressed_size = max(item.compress_size, 1)
+        if item.file_size / compressed_size > MAX_XLSX_COMPRESSION_RATIO:
+            raise ValueError("Arquivo XLSX possui compactação suspeita")
+
+
 def _read_xlsx(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
     if not zipfile.is_zipfile(io.BytesIO(content)):
         raise ValueError("Arquivo XLSX inválido")
-    with zipfile.ZipFile(io.BytesIO(content)) as zf:
-        sheet_path = _first_sheet_path(zf)
-        shared = _shared_strings(zf)
-        rows = []
-        for event, row in ET.iterparse(zf.open(sheet_path), events=("end",)):
-            if not row.tag.endswith("row"):
-                continue
-            values: dict[int, str] = defaultdict(str)
-            max_col = 0
-            for cell in row:
-                if not cell.tag.endswith("c"):
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as zf:
+            _validate_xlsx_archive(zf)
+            sheet_path = _first_sheet_path(zf)
+            shared = _shared_strings(zf)
+            rows = []
+            for event, row in ET.iterparse(zf.open(sheet_path), events=("end",)):
+                if not row.tag.endswith("row"):
                     continue
-                index = _col_index(cell.attrib.get("r", ""))
-                if not index:
-                    continue
-                max_col = max(max_col, index)
-                values[index] = _cell_text(cell, shared)
-            rows.append([values[index] for index in range(1, max_col + 1)])
-            row.clear()
+                values: dict[int, str] = defaultdict(str)
+                max_col = 0
+                for cell in row:
+                    if not cell.tag.endswith("c"):
+                        continue
+                    index = _col_index(cell.attrib.get("r", ""))
+                    if not index:
+                        continue
+                    max_col = max(max_col, index)
+                    values[index] = _cell_text(cell, shared)
+                rows.append([values[index] for index in range(1, max_col + 1)])
+                row.clear()
+    except ValueError:
+        raise
+    except (KeyError, OSError, ET.ParseError, zipfile.BadZipFile) as exc:
+        raise ValueError("Arquivo XLSX inválido ou corrompido") from exc
     return _rows_to_dicts(rows)
 
 
@@ -336,32 +393,88 @@ def _header_row_index(rows: list[list[str]]) -> int:
 
 
 def _is_separator_row(row: list[str]) -> bool:
-    non_empty = [cell for cell in row if cell]
+    non_empty = [cell for cell in row if cell.strip()]
     return bool(non_empty) and all(re.fullmatch(r":?-{2,}:?", cell.strip()) for cell in non_empty)
 
 
-def _trim_outer_empty_cells(row: list[str]) -> list[str]:
-    values = [str(value or "").strip() for value in row]
-    while values and not values[0]:
+def _trim_outer_empty_cells(
+    row: list[str], *, strip_values: bool = True
+) -> list[str]:
+    values = [str(value or "") for value in row]
+    while values and not values[0].strip():
         values = values[1:]
-    while values and not values[-1]:
+    while values and not values[-1].strip():
         values = values[:-1]
-    return values
+    return [value.strip() for value in values] if strip_values else values
+
+
+def _rows_to_dicts_iter(
+    rows: Iterable[list[str]],
+) -> tuple[list[str], Iterator[dict[str, str]]]:
+    iterator = iter(rows)
+    raw_prefix = [
+        _trim_outer_empty_cells(row, strip_values=False)
+        for row in islice(iterator, 50)
+    ]
+    normalized_prefix = [
+        [value.strip() for value in row]
+        for row in raw_prefix
+    ]
+    if not normalized_prefix:
+        return [], iter(())
+    header_index = _header_row_index(normalized_prefix)
+    headers = normalized_prefix[header_index]
+    if not headers or not any(headers):
+        raise ValueError("Não foi possível identificar o cabeçalho da planilha")
+    if len(headers) > MAX_IMPORT_COLUMNS:
+        raise ValueError(f"Planilha excede o limite de {MAX_IMPORT_COLUMNS} colunas")
+
+    header_keys: dict[str, list[str]] = defaultdict(list)
+    target_headers: dict[str, list[str]] = defaultdict(list)
+    for header in headers:
+        key = _header_key(header)
+        if key:
+            header_keys[key].append(header)
+        target = _target_for_header(header)
+        if target:
+            target_headers[target].append(header)
+    duplicated = {values[0] for values in header_keys.values() if len(values) > 1}
+    ambiguous_targets = {
+        target
+        for target, values in target_headers.items()
+        if len(values) > 1
+    }
+    if duplicated or ambiguous_targets:
+        names = sorted(ambiguous_targets or duplicated)
+        raise ValueError(f"Planilha contém colunas ambíguas ou duplicadas: {', '.join(names)}")
+
+    def data_rows() -> Iterator[dict[str, str]]:
+        raw_tail = chain(
+            raw_prefix[header_index + 1:],
+            (
+                _trim_outer_empty_cells(row, strip_values=False)
+                for row in iterator
+            ),
+        )
+        for row_number, row in enumerate(raw_tail, start=header_index + 2):
+            padded = row + [""] * (len(headers) - len(row))
+            if not any(value.strip() for value in padded) or _is_separator_row(padded):
+                continue
+            source_row = {
+                header: padded[index] if index < len(padded) else ""
+                for index, header in enumerate(headers)
+            }
+            source_row[SOURCE_ROW_NUMBER_KEY] = row_number
+            if any(value.strip() for value in row[len(headers):]):
+                source_row[SOURCE_ROW_ISSUES_KEY] = ["linha possui colunas além do cabeçalho"]
+            yield source_row
+
+    return headers, data_rows()
 
 
 def _rows_to_dicts(rows: list[list[str]]) -> tuple[list[str], list[dict[str, str]]]:
-    if not rows:
-        return [], []
-    normalized_rows = [_trim_outer_empty_cells(row) for row in rows]
-    header_index = _header_row_index(normalized_rows)
-    headers = normalized_rows[header_index]
-    data_rows = []
-    for row in normalized_rows[header_index + 1:]:
-        padded = row + [""] * (len(headers) - len(row))
-        if not any(padded) or _is_separator_row(padded):
-            continue
-        data_rows.append({header: padded[index] if index < len(padded) else "" for index, header in enumerate(headers)})
-    return headers, data_rows
+    headers, data_rows = _rows_to_dicts_iter(rows)
+    return headers, list(data_rows)
 
 
 def _decode_xls_text(content: bytes) -> str:
@@ -374,6 +487,7 @@ def _decode_xls_text(content: bytes) -> str:
 
 
 def _read_xls_html(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
+    content = content.replace(b"\x00", b"")
     parser = _HtmlTableParser()
     parser.feed(_decode_xls_text(content))
     return _rows_to_dicts(parser.rows)
@@ -389,14 +503,14 @@ def _detect_delimiter(sample: str) -> str | None:
 def _read_delimited_text(text: str) -> tuple[list[str], list[dict[str, str]]]:
     sample = text[:4096]
     delimiter = _detect_delimiter(sample)
-    if delimiter:
-        rows = [row for row in csv.reader(io.StringIO(text), delimiter=delimiter)]
-    else:
-        try:
+    try:
+        if delimiter:
+            rows = [row for row in csv.reader(io.StringIO(text), delimiter=delimiter, strict=True)]
+        else:
             dialect = csv.Sniffer().sniff(sample, delimiters="\t;,|")
-        except csv.Error:
-            dialect = csv.excel
-        rows = [row for row in csv.reader(io.StringIO(text), dialect=dialect)]
+            rows = [row for row in csv.reader(io.StringIO(text), dialect=dialect, strict=True)]
+    except csv.Error as exc:
+        raise ValueError("Arquivo delimitado inválido: verifique separadores e aspas") from exc
     return _rows_to_dicts(rows)
 
 
@@ -409,7 +523,10 @@ def _read_xls_binary(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
         import xlrd
     except ModuleNotFoundError as exc:
         raise ValueError("Arquivo XLS binário requer a dependência xlrd instalada no backend") from exc
-    workbook = xlrd.open_workbook(file_contents=content)
+    try:
+        workbook = xlrd.open_workbook(file_contents=content)
+    except xlrd.biffh.XLRDError as exc:
+        raise ValueError("Arquivo XLS inválido ou corrompido") from exc
     if not workbook.nsheets:
         return [], []
     sheet = workbook.sheet_by_index(0)
@@ -439,8 +556,19 @@ def _read_xls(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
     return _read_xls_delimited(content)
 
 
+def _decode_csv(content: bytes) -> str:
+    if b"\x00" in content:
+        raise ValueError("Arquivo CSV contém dados binários inválidos")
+    for encoding in ("utf-8-sig", "cp1252"):
+        try:
+            return content.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    raise ValueError(CSV_ENCODING_ERROR)
+
+
 def _read_csv(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
-    return _read_delimited_text(content.decode("utf-8-sig"))
+    return _read_delimited_text(_decode_csv(content))
 
 
 def read_import_rows(content: bytes, filename: str) -> tuple[str, list[str], list[dict[str, str]]]:
@@ -462,52 +590,77 @@ def _is_number(value: str) -> bool:
         return False
 
 
-def _parse_time_fraction(value: str | None) -> float:
+def _parse_time_fraction(value: str | None) -> float | None:
     text = _clean_optional(value)
     if not text:
         return 0.0
     if _is_number(text):
-        return float(text.replace(",", "."))
+        parsed = float(text.replace(",", "."))
+        return parsed if math.isfinite(parsed) and 0 <= parsed < 1 else None
     for fmt in ("%H:%M:%S", "%H:%M"):
         try:
             parsed = datetime.strptime(text, fmt)
             return (parsed.hour * 3600 + parsed.minute * 60 + parsed.second) / 86400
         except ValueError:
             pass
-    return 0.0
+    return None
+
+
+def _supported_datetime(value: datetime) -> datetime | None:
+    return value if MIN_SUPPORTED_YEAR <= value.year <= MAX_SUPPORTED_YEAR else None
 
 
 def _parse_datetime(date_value: object, time_value: object | None = None) -> datetime | None:
     date_text = _clean_optional(date_value)
     if not date_text:
         return None
-    if _is_number(date_text):
-        days = float(date_text.replace(",", ".")) + _parse_time_fraction(_clean(time_value))
-        return EXCEL_EPOCH + timedelta(days=days)
-    combined = date_text
     time_text = _clean_optional(time_value)
+    if _is_number(date_text):
+        date_number = float(date_text.replace(",", "."))
+        time_fraction = _parse_time_fraction(time_text)
+        if not math.isfinite(date_number) or time_fraction is None:
+            return None
+        try:
+            return _supported_datetime(EXCEL_EPOCH + timedelta(days=date_number + time_fraction))
+        except OverflowError:
+            return None
+
+    combined = date_text
     if time_text:
         if _is_number(time_text):
-            time_delta = timedelta(days=float(time_text.replace(",", ".")))
+            time_fraction = _parse_time_fraction(time_text)
+            if time_fraction is None:
+                return None
             base = _parse_datetime(date_text)
-            return base + time_delta if base else None
+            return _supported_datetime(base + timedelta(days=time_fraction)) if base else None
         combined = f"{date_text} {time_text}"
-    for value in (combined, date_text):
+
+    try:
+        parsed = datetime.fromisoformat(combined.replace("Z", "+00:00"))
+        localized = parsed if parsed.tzinfo else parsed.replace(tzinfo=LOCAL_TZ)
+        return _supported_datetime(localized)
+    except ValueError:
+        pass
+
+    formats = (
+        "%d/%m/%Y - %H:%M:%S",
+        "%d/%m/%Y - %H:%M",
+        "%d/%m/%Y %H:%M:%S",
+        "%d/%m/%Y %H:%M",
+        "%d/%m/%Y",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d",
+    )
+    for fmt in formats:
         try:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-            return parsed if parsed.tzinfo else parsed.replace(tzinfo=LOCAL_TZ)
-        except ValueError:
-            pass
-    for fmt in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d/%m/%Y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-        try:
-            parsed = datetime.strptime(combined, fmt)
-            return parsed.replace(tzinfo=LOCAL_TZ)
+            parsed = datetime.strptime(combined, fmt).replace(tzinfo=LOCAL_TZ)
+            return _supported_datetime(parsed)
         except ValueError:
             pass
     return None
 
 
-def _parse_float(value: object) -> tuple[float | None, bool]:
+def _parse_float(value: object, minimum: float, maximum: float) -> tuple[float | None, bool]:
     text = _clean_optional(value)
     if not text:
         return None, False
@@ -515,7 +668,7 @@ def _parse_float(value: object) -> tuple[float | None, bool]:
         parsed = float(text.replace(",", "."))
     except ValueError:
         return None, True
-    if not -180 <= parsed <= 180:
+    if not math.isfinite(parsed) or not minimum <= parsed <= maximum:
         return None, True
     return parsed, False
 
@@ -525,7 +678,7 @@ def _parse_bool(value: object) -> bool:
     return text in {"SIM", "TRUE", "1", "S"}
 
 
-def _row_by_target(source_row: dict[str, str]) -> dict[str, str]:
+def _row_by_target(source_row: dict[str, object]) -> dict[str, str]:
     mapped: dict[str, str] = {}
     for header, value in source_row.items():
         target = _target_for_header(header)
@@ -543,16 +696,27 @@ def _join_address(mapped: dict[str, str]) -> str:
     return " - ".join(part for part in parts if part)
 
 
-def _normalize_record(source_row: dict[str, str]) -> dict:
+def _normalize_ibge(value: object) -> str:
+    text = _clean_optional(value)
+    if re.fullmatch(r"\d+\.0", text):
+        return text[:-2]
+    return text
+
+
+def _normalize_record(source_row: dict[str, object]) -> dict:
     mapped = _row_by_target(source_row)
     abertura = _parse_datetime(mapped.get("abertura_em")) or _parse_datetime(mapped.get("data_fato"), mapped.get("hora_fato"))
     registro = _parse_datetime(mapped.get("registro_em")) or _parse_datetime(mapped.get("data_registro"), mapped.get("hora_registro"))
     latitude_raw = _clean_optional(mapped.get("latitude"))
     longitude_raw = _clean_optional(mapped.get("longitude"))
-    latitude, latitude_invalid = _parse_float(latitude_raw)
-    longitude, longitude_invalid = _parse_float(longitude_raw)
+    latitude, latitude_invalid = _parse_float(latitude_raw, -90, 90)
+    longitude, longitude_invalid = _parse_float(longitude_raw, -180, 180)
     coordinate_invalid = latitude_invalid or longitude_invalid
     coordinate_missing = not latitude_raw or not longitude_raw
+    if coordinate_invalid or coordinate_missing:
+        latitude = None
+        longitude = None
+    source_payload = {key: value for key, value in source_row.items() if not key.startswith("__")}
     return {
         "id_origem": _clean_optional(mapped.get("id_origem")),
         "abertura_em": abertura.isoformat() if abertura else "",
@@ -568,29 +732,37 @@ def _normalize_record(source_row: dict[str, str]) -> dict:
         "endereco": _join_address(mapped),
         "latitude": latitude,
         "longitude": longitude,
-        "codigo_ibge": _clean_optional(mapped.get("codigo_ibge")),
+        "codigo_ibge": _normalize_ibge(mapped.get("codigo_ibge")),
         "segredo_de_justica": _parse_bool(mapped.get("segredo_de_justica")),
         "periodo_registro": _clean_optional(mapped.get("periodo_registro")),
         "_coordenada_invalida": coordinate_invalid,
         "_coordenada_ausente": coordinate_missing,
-        "dados_origem": json.dumps(source_row, ensure_ascii=False, separators=(",", ":")),
+        "_problemas_origem": list(source_row.get(SOURCE_ROW_ISSUES_KEY, [])),
+        "dados_origem": json.dumps(source_payload, ensure_ascii=False, separators=(",", ":")),
     }
 
 
 def _validate_record(record: dict, seen: set[str]) -> list[str]:
-    issues = []
+    issues = list(record["_problemas_origem"])
     source_id = record["id_origem"]
     if not source_id:
         issues.append("id_origem ausente")
     elif source_id in seen:
         issues.append("id_origem duplicado no arquivo")
-    seen.add(source_id)
+    else:
+        seen.add(source_id)
     if not record["_abertura_datetime"]:
         issues.append("abertura_em inválido")
     if not record["municipio"]:
         issues.append("municipio ausente")
     if not record["tipo"]:
         issues.append("tipo ausente")
+    for field, maximum in FIELD_MAX_LENGTHS.items():
+        if len(record.get(field) or "") > maximum:
+            issues.append(f"{field} excede {maximum} caracteres")
+    ibge_code = record["codigo_ibge"]
+    if ibge_code and not re.fullmatch(r"\d{7}", ibge_code):
+        issues.append("codigo_ibge deve conter 7 dígitos")
     return issues
 
 
@@ -607,30 +779,34 @@ def _column_mappings(headers: list[str]) -> list[dict]:
     return mappings
 
 
-def _registration_years(records: list[dict]) -> list[int]:
-    years = {
-        date.year
-        for item in records
-        for date in [item["record"].get("_registro_datetime") or item["record"].get("_abertura_datetime")]
-        if date
-    }
-    return sorted(years)
-
-
-def _parsed_import(content: bytes, filename: str) -> dict:
-    source_format, headers, source_rows = read_import_rows(content, filename)
+def _parsed_import_rows(
+    source_format: str,
+    headers: list[str],
+    source_rows: Iterable[dict[str, str]],
+    *,
+    retain_records: bool = True,
+) -> dict:
     mappings = _column_mappings(headers)
     recognized = sorted({item["target_field"] for item in mappings if item["target_field"]})
     missing = sorted(REQUIRED - set(recognized))
     profile = _source_profile(headers)
     issues = []
     records = []
+    validation_errors = []
+    if missing:
+        validation_errors.append(f"Cabeçalhos obrigatórios ausentes: {', '.join(missing)}")
     seen: set[str] = set()
+    valid_source_ids: list[str] = []
+    registration_years: set[int] = set()
     valid = 0
+    issue_count = 0
     sensitive_rows = 0
     invalid_coordinate_rows = 0
     missing_coordinate_rows = 0
+    total_rows = 0
     for index, source_row in enumerate(source_rows, start=2):
+        total_rows += 1
+        row_number = int(source_row.get(SOURCE_ROW_NUMBER_KEY, index))
         record = _normalize_record(source_row)
         row_issues = _validate_record(record, seen)
         if record["segredo_de_justica"]:
@@ -642,10 +818,24 @@ def _parsed_import(content: bytes, filename: str) -> dict:
         valid_row = not row_issues and not missing
         if valid_row:
             valid += 1
+            valid_source_ids.append(record["id_origem"])
+            registration_date = (
+                record["_registro_datetime"] or record["_abertura_datetime"]
+            )
+            if registration_date:
+                registration_years.add(registration_date.year)
         else:
-            issues.append({"row": index, "issues": row_issues or ["cabeçalhos obrigatórios ausentes"]})
-        records.append({"row": index, "record": record, "issues": row_issues})
-    registration_years = _registration_years(records)
+            issue_count += 1
+            if len(issues) < 50:
+                issues.append({
+                    "row": row_number,
+                    "issues": row_issues or ["cabeçalhos obrigatórios ausentes"],
+                })
+        if retain_records:
+            records.append({"row": row_number, "record": record, "issues": row_issues})
+    if not total_rows:
+        validation_errors.append("Arquivo sem linhas de dados")
+    unmapped_headers = [item["source_header"] for item in mappings if not item["target_field"]]
     warnings = []
     if sensitive_rows:
         warnings.append(f"{sensitive_rows} linha(s) com segredo de justiça identificadas")
@@ -653,31 +843,132 @@ def _parsed_import(content: bytes, filename: str) -> dict:
         warnings.append(f"{invalid_coordinate_rows} linha(s) com coordenadas inválidas ou não numéricas")
     if missing_coordinate_rows:
         warnings.append(f"{missing_coordinate_rows} linha(s) sem coordenadas completas")
+    if unmapped_headers:
+        warnings.append(f"{len(unmapped_headers)} coluna(s) não reconhecida(s) serão ignoradas")
+    if issue_count > 50:
+        warnings.append(f"A prévia exibe 50 de {issue_count} linha(s) inválida(s)")
     return {
         "headers": headers,
         "recognized_headers": recognized,
         "missing_required_headers": missing,
-        "total_rows": len(source_rows),
+        "total_rows": total_rows,
         "valid_rows": valid,
-        "invalid_rows": (len(source_rows) - valid) if not missing else len(source_rows),
-        "issues": issues[:50],
-        "can_commit": not missing and not issues,
+        "invalid_rows": (total_rows - valid) if not missing else total_rows,
+        "issues": issues,
+        "validation_errors": validation_errors,
+        "can_commit": not validation_errors and valid > 0,
         "source_format": source_format,
         "source_profile": profile,
-        "registration_years": registration_years,
+        "registration_years": sorted(registration_years),
         "column_mappings": mappings,
-        "unmapped_headers": [item["source_header"] for item in mappings if not item["target_field"]],
+        "unmapped_headers": unmapped_headers,
         "sensitive_rows": sensitive_rows,
         "invalid_coordinate_rows": invalid_coordinate_rows,
         "missing_coordinate_rows": missing_coordinate_rows,
         "warnings": warnings,
         "_records": records,
+        "_valid_source_ids": valid_source_ids,
     }
 
 
-def preview_import(content: bytes, filename: str = "arquivo.csv") -> dict:
-    parsed = _parsed_import(content, filename)
+def _parsed_import(
+    content: bytes, filename: str, *, retain_records: bool = True
+) -> dict:
+    source_format, headers, source_rows = read_import_rows(content, filename)
+    return _parsed_import_rows(
+        source_format,
+        headers,
+        source_rows,
+        retain_records=retain_records,
+    )
+
+
+def _detect_csv_stream_encoding(source: BinaryIO) -> str:
+    source.seek(0)
+    decoders = {
+        "utf-8-sig": codecs.getincrementaldecoder("utf-8-sig")(),
+        "cp1252": codecs.getincrementaldecoder("cp1252")(),
+    }
+    valid = {encoding: True for encoding in decoders}
+    while True:
+        chunk = source.read(1024 * 1024)
+        if not chunk:
+            break
+        if b"\x00" in chunk:
+            raise ValueError("Arquivo CSV contém dados binários inválidos")
+        for encoding, decoder in decoders.items():
+            if not valid[encoding]:
+                continue
+            try:
+                decoder.decode(chunk)
+            except UnicodeDecodeError:
+                valid[encoding] = False
+    for encoding, decoder in decoders.items():
+        if not valid[encoding]:
+            continue
+        try:
+            decoder.decode(b"", final=True)
+        except UnicodeDecodeError:
+            valid[encoding] = False
+    source.seek(0)
+    for encoding in ("utf-8-sig", "cp1252"):
+        if valid[encoding]:
+            return encoding
+    raise ValueError(CSV_ENCODING_ERROR)
+
+
+def _parsed_csv_stream(source: BinaryIO, *, retain_records: bool = True) -> dict:
+    encoding = _detect_csv_stream_encoding(source)
+    source.seek(0)
+    sample = source.read(4096).decode(encoding, errors="ignore")
+    source.seek(0)
+    delimiter = _detect_delimiter(sample)
+    text_stream = io.TextIOWrapper(source, encoding=encoding, newline="")
+    try:
+        if delimiter:
+            rows = csv.reader(text_stream, delimiter=delimiter, strict=True)
+        else:
+            dialect = csv.Sniffer().sniff(sample, delimiters="\t;,|")
+            rows = csv.reader(text_stream, dialect=dialect, strict=True)
+        headers, source_rows = _rows_to_dicts_iter(rows)
+        return _parsed_import_rows(
+            "csv",
+            headers,
+            source_rows,
+            retain_records=retain_records,
+        )
+    except csv.Error as exc:
+        raise ValueError("Arquivo delimitado inválido: verifique separadores e aspas") from exc
+    finally:
+        text_stream.detach()
+        source.seek(0)
+
+
+def _parsed_import_stream(
+    source: BinaryIO, filename: str, *, retain_records: bool = True
+) -> dict:
+    source.seek(0)
+    is_xlsx = zipfile.is_zipfile(source)
+    source.seek(0)
+    if _source_format(filename) == "csv" and not is_xlsx:
+        return _parsed_csv_stream(source, retain_records=retain_records)
+    content = source.read()
+    source.seek(0)
+    return _parsed_import(content, filename, retain_records=retain_records)
+
+
+def _public_preview(parsed: dict) -> dict:
     return {key: value for key, value in parsed.items() if not key.startswith("_")}
+
+
+def preview_import(content: bytes, filename: str = "arquivo.csv") -> dict:
+    return _public_preview(_parsed_import(content, filename, retain_records=False))
+
+
+def preview_import_stream(source: BinaryIO, filename: str = "arquivo.csv") -> dict:
+    return _public_preview(
+        _parsed_import_stream(source, filename, retain_records=False)
+    )
 
 
 def preview_csv(content: bytes) -> dict:
@@ -721,6 +1012,40 @@ def _source_scope_for_profile(profile: str) -> str:
     return SISTEMA_ORIGEM_SEJUSP if profile == "RELATORIO_SEJUSP" else SISTEMA_ORIGEM_FOCO
 
 
+def _preview_parsed_with_database(db: Session, parsed: dict) -> dict:
+    source_ids = parsed["_valid_source_ids"]
+    source_scope = _source_scope_for_profile(parsed["source_profile"])
+    existing = _existing_source_ids(db, source_scope, source_ids)
+    existing_rows = sum(1 for source_id in source_ids if source_id in existing)
+    result = _public_preview(parsed)
+    result["existing_rows"] = existing_rows
+    result["new_rows"] = len(source_ids) - existing_rows
+    if existing_rows:
+        result["warnings"] = [
+            *result["warnings"],
+            f"{existing_rows} linha(s) válida(s) já existem e serão ignoradas na confirmação",
+        ]
+    return result
+
+
+def preview_import_with_database(
+    db: Session, content: bytes, filename: str = "arquivo.csv"
+) -> dict:
+    return _preview_parsed_with_database(
+        db,
+        _parsed_import(content, filename, retain_records=False),
+    )
+
+
+def preview_import_stream_with_database(
+    db: Session, source: BinaryIO, filename: str = "arquivo.csv"
+) -> dict:
+    return _preview_parsed_with_database(
+        db,
+        _parsed_import_stream(source, filename, retain_records=False),
+    )
+
+
 def _issue_reasons(item: dict, missing_required_headers: list[str]) -> list[str]:
     if item["issues"]:
         return item["issues"]
@@ -729,10 +1054,12 @@ def _issue_reasons(item: dict, missing_required_headers: list[str]) -> list[str]
     return []
 
 
-def _create_import_batch(db: Session, content: bytes, filename: str, parsed: dict, sistema_origem: str) -> ImportBatch:
+def _create_import_batch(
+    db: Session, file_hash: str, filename: str, parsed: dict, sistema_origem: str
+) -> ImportBatch:
     batch = ImportBatch(
         filename=filename,
-        file_hash=hashlib.sha256(content).hexdigest(),
+        file_hash=file_hash,
         file_format=parsed["source_format"],
         source_profile=parsed["source_profile"],
         source_system=sistema_origem,
@@ -747,6 +1074,20 @@ def _create_import_batch(db: Session, content: bytes, filename: str, parsed: dic
     db.add(batch)
     db.flush()
     return batch
+
+
+def _acquire_import_transaction_lock(db: Session) -> None:
+    if db.get_bind().dialect.name != "postgresql":
+        return
+    acquired = db.scalar(
+        select(func.pg_try_advisory_xact_lock(IMPORT_TRANSACTION_LOCK_ID))
+    )
+    if acquired:
+        return
+    db.rollback()
+    raise ImportInProgressError(
+        "Outra confirmação de importação está em processamento; tente novamente em instantes"
+    )
 
 
 def _store_rejected_rows(db: Session, batch: ImportBatch, parsed: dict) -> None:
@@ -765,13 +1106,15 @@ def _store_rejected_rows(db: Session, batch: ImportBatch, parsed: dict) -> None:
         )
 
 
-def commit_import(db: Session, content: bytes, filename: str) -> dict:
-    parsed = _parsed_import(content, filename)
+def _commit_parsed_import(
+    db: Session, parsed: dict, filename: str, file_hash: str
+) -> dict:
+    _acquire_import_transaction_lock(db)
     sistema_origem = _source_scope_for_profile(parsed["source_profile"])
-    batch = _create_import_batch(db, content, filename, parsed, sistema_origem)
+    batch = _create_import_batch(db, file_hash, filename, parsed, sistema_origem)
     _store_rejected_rows(db, batch, parsed)
 
-    if parsed["missing_required_headers"]:
+    if parsed["validation_errors"]:
         batch.status = "rejeitado"
         batch.finished_at = datetime.now(timezone.utc)
         db.commit()
@@ -789,6 +1132,7 @@ def commit_import(db: Session, content: bytes, filename: str) -> dict:
             "invalid_coordinate_rows": parsed["invalid_coordinate_rows"],
             "missing_coordinate_rows": parsed["missing_coordinate_rows"],
             "issues": parsed["issues"],
+            "validation_errors": parsed["validation_errors"],
             "warnings": parsed["warnings"],
             "can_commit": False,
         }
@@ -796,7 +1140,12 @@ def commit_import(db: Session, content: bytes, filename: str) -> dict:
     valid_records = [item for item in parsed["_records"] if not item["issues"]]
     source_ids = [item["record"]["id_origem"] for item in valid_records]
     existing = _existing_source_ids(db, sistema_origem, source_ids)
-    unit_names = sorted({item["record"]["unidade_operacional"] for item in valid_records if item["record"]["unidade_operacional"]})
+    unit_names = sorted({
+        item["record"]["unidade_operacional"]
+        for item in valid_records
+        if item["record"]["id_origem"] not in existing
+        and item["record"]["unidade_operacional"]
+    })
     units = _units_by_name(db, unit_names)
     inserted = 0
     skipped = 0
@@ -857,6 +1206,27 @@ def commit_import(db: Session, content: bytes, filename: str) -> dict:
         "invalid_coordinate_rows": parsed["invalid_coordinate_rows"],
         "missing_coordinate_rows": parsed["missing_coordinate_rows"],
         "issues": parsed["issues"],
+        "validation_errors": parsed["validation_errors"],
         "warnings": parsed["warnings"],
         "can_commit": parsed["can_commit"],
     }
+
+
+def commit_import(db: Session, content: bytes, filename: str) -> dict:
+    return _commit_parsed_import(
+        db,
+        _parsed_import(content, filename),
+        filename,
+        hashlib.sha256(content).hexdigest(),
+    )
+
+
+def commit_import_stream(
+    db: Session, source: BinaryIO, filename: str, file_hash: str
+) -> dict:
+    return _commit_parsed_import(
+        db,
+        _parsed_import_stream(source, filename),
+        filename,
+        file_hash,
+    )

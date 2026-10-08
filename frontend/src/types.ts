@@ -23,16 +23,23 @@ export type CsvPreview = {
   valid_rows:number
   invalid_rows:number
   issues:CsvIssue[]
+  validation_errors:string[]
   can_commit:boolean
   source_format:string
   source_profile:string
   registration_years:number[]
+  existing_rows:number
+  new_rows:number
   column_mappings:ColumnMapping[]
   unmapped_headers:string[]
   sensitive_rows:number
   invalid_coordinate_rows:number
   missing_coordinate_rows:number
   warnings:string[]
+  already_imported:boolean
+  previous_import_batch_id:number|null
+  previous_import_status:string|null
+  previous_import_at:string|null
 }
 
 export type ImportCommit = {
@@ -49,6 +56,7 @@ export type ImportCommit = {
   invalid_coordinate_rows:number
   missing_coordinate_rows:number
   issues:CsvIssue[]
+  validation_errors:string[]
   warnings:string[]
   can_commit:boolean
 }

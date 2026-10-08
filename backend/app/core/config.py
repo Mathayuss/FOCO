@@ -20,7 +20,7 @@ class Settings(BaseSettings):
         r"100\.\d+\.\d+\.\d+):5173"
     )
 
-    limite_importacao_mb: int = Field(default=50, gt=0)
+    limite_importacao_mb: int = Field(default=512, gt=0, le=512)
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

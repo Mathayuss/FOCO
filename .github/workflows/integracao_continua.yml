@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   servidor:
     name: Testes do servidor
@@ -21,6 +24,10 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Testar verificacao da exposicao do banco
+        working-directory: .
+        run: python -m unittest discover -s infraestrutura/tests -v
+
       - name: Instalar dependências
         run: pip install -r requirements.txt
 
@@ -32,8 +39,14 @@ jobs:
       - name: Executar testes
         run: pytest -q
 
+      - name: Verificar Compose sem iniciar containers
+        working-directory: .
+        run: |
+          cp .env.example .env
+          python infraestrutura/scripts/verificar_banco_docker.py
+
   interface:
-    name: Compilar interface
+    name: Compilar e testar interface
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -55,3 +68,23 @@ jobs:
 
       - name: Compilar
         run: pnpm run build
+
+      - name: Validar tipos dos testes
+        run: pnpm run test:types
+
+      - name: Preparar Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Testar dashboards isolados
+        run: pnpm run test
+
+      - name: Preservar relatorio dos testes
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: testes-interface
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7

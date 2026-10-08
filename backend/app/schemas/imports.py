@@ -18,8 +18,11 @@ class CsvPreviewResponse(BaseModel):
     valid_rows: int
     invalid_rows: int
     issues: list[CsvIssue]
+    validation_errors: list[str] = Field(default_factory=list)
     can_commit: bool
     source_format: str = "csv"
+    existing_rows: int = 0
+    new_rows: int = 0
     source_profile: str = "FOCO"
     registration_years: list[int] = Field(default_factory=list)
     column_mappings: list[ColumnMapping] = Field(default_factory=list)
@@ -28,6 +31,12 @@ class CsvPreviewResponse(BaseModel):
     invalid_coordinate_rows: int = 0
     missing_coordinate_rows: int = 0
     warnings: list[str] = Field(default_factory=list)
+
+    already_imported: bool = False
+    previous_import_batch_id: int | None = None
+    previous_import_status: str | None = None
+    previous_import_at: str | None = None
+
 
 class ImportCommitResponse(BaseModel):
     id_lote_importacao: int
@@ -43,6 +52,7 @@ class ImportCommitResponse(BaseModel):
     invalid_coordinate_rows: int
     missing_coordinate_rows: int
     issues: list[CsvIssue]
+    validation_errors: list[str] = Field(default_factory=list)
     warnings: list[str]
     can_commit: bool
 

@@ -1,4 +1,8 @@
+from contextlib import contextmanager
+import hashlib
 from pathlib import PurePath
+from threading import BoundedSemaphore
+from typing import BinaryIO
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
@@ -13,14 +17,21 @@ from app.schemas.imports import (
     RejectedImportLineListResponse,
 )
 from app.services import import_audit_service
-from app.services.import_service import commit_import, preview_import
+from app.services.import_service import (
+    CSV_ENCODING_ERROR,
+    ImportInProgressError,
+    commit_import_stream,
+    preview_import_stream_with_database,
+)
 
 
 router = APIRouter(prefix="/imports", tags=["importações"])
 settings = get_settings()
 
+UPLOAD_READ_CHUNK_BYTES = 1024 * 1024
 MAX_IMPORT_MEGABYTES = settings.limite_importacao_mb
 MAX_IMPORT_BYTES = MAX_IMPORT_MEGABYTES * 1024 * 1024
+_IMPORT_PROCESSING_SEMAPHORE = BoundedSemaphore(value=1)
 
 # Compatibilidade temporária com referências existentes.
 MAX_CSV_MEGABYTES = MAX_IMPORT_MEGABYTES
@@ -40,8 +51,24 @@ ALLOWED_IMPORT_MIME_TYPES = {
 }
 
 
+@contextmanager
+def _import_processing_slot():
+    if not _IMPORT_PROCESSING_SEMAPHORE.acquire(blocking=False):
+        raise HTTPException(
+            status_code=503,
+            detail="Outra importação está em processamento; tente novamente em instantes",
+            headers={"Retry-After": "2"},
+        )
+    try:
+        yield
+    finally:
+        _IMPORT_PROCESSING_SEMAPHORE.release()
+
+
 def _validate_upload_metadata(file: UploadFile) -> str:
     filename = file.filename or ""
+    if not filename or len(filename) > 255 or any(ord(character) < 32 for character in filename):
+        raise HTTPException(status_code=400, detail="Nome de arquivo inválido")
     if PurePath(filename).name != filename or "\\" in filename:
         raise HTTPException(status_code=400, detail="Nome de arquivo inválido")
 
@@ -56,20 +83,36 @@ def _validate_upload_metadata(file: UploadFile) -> str:
     return filename
 
 
-async def _read_upload(file: UploadFile) -> tuple[str, bytes]:
+def _prepare_upload(file: UploadFile) -> tuple[str, BinaryIO, str]:
     filename = _validate_upload_metadata(file)
-    content = await file.read(MAX_IMPORT_BYTES + 1)
-
-    if len(content) > MAX_IMPORT_BYTES:
+    if file.size is not None and file.size > MAX_IMPORT_BYTES:
         raise HTTPException(
             status_code=413,
             detail=f"Arquivo excede o limite de {MAX_IMPORT_MEGABYTES} MB",
         )
 
-    if not content.strip():
+    digest = hashlib.sha256()
+    total_bytes = 0
+    has_content = False
+    file.file.seek(0)
+    while True:
+        chunk = file.file.read(UPLOAD_READ_CHUNK_BYTES)
+        if not chunk:
+            break
+        total_bytes += len(chunk)
+        if total_bytes > MAX_IMPORT_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Arquivo excede o limite de {MAX_IMPORT_MEGABYTES} MB",
+            )
+        digest.update(chunk)
+        has_content = has_content or bool(chunk.strip())
+
+    if not has_content:
         raise HTTPException(status_code=400, detail="Arquivo vazio")
 
-    return filename, content
+    file.file.seek(0)
+    return filename, file.file, digest.hexdigest()
 
 
 @router.get("/lotes", response_model=ImportBatchListResponse)
@@ -107,28 +150,63 @@ def list_import_batch_rejections(
     return result
 
 
-@router.post("/preview", response_model=CsvPreviewResponse)
-async def import_preview(file: UploadFile = File(...)):
-    filename, content = await _read_upload(file)
+def _preview_with_history(file: UploadFile, db: Session) -> dict:
+    filename, source, file_hash = _prepare_upload(file)
+    result = preview_import_stream_with_database(db, source, filename)
+    previous = import_audit_service.find_latest_batch_by_hash(db, file_hash)
+    result["already_imported"] = previous is not None
+    result["previous_import_batch_id"] = previous["id_lote_importacao"] if previous else None
+    result["previous_import_status"] = previous["situacao"] if previous else None
+    result["previous_import_at"] = previous["iniciado_em"] if previous else None
+    if previous:
+        result["warnings"] = [
+            *result.get("warnings", []),
+            (
+                f"Este arquivo já foi processado no lote "
+                f"#{previous['id_lote_importacao']} ({previous['situacao']})"
+            ),
+        ]
+    return result
+
+
+def _preview_response(file: UploadFile, db: Session) -> dict:
     try:
-        return preview_import(content, filename)
+        with _import_processing_slot():
+            return _preview_with_history(file, db)
     except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="CSV deve estar em UTF-8")
+        raise HTTPException(status_code=400, detail=CSV_ENCODING_ERROR)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/preview", response_model=CsvPreviewResponse)
+def import_preview(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    return _preview_response(file, db)
 
 
 @router.post("/csv/preview", response_model=CsvPreviewResponse)
-async def csv_preview(file: UploadFile = File(...)):
-    return await import_preview(file)
+def csv_preview(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    return _preview_response(file, db)
 
 
 @router.post("", response_model=ImportCommitResponse)
-async def create_import(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    filename, content = await _read_upload(file)
-    try:
-        return commit_import(db, content, filename)
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="CSV deve estar em UTF-8")
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+def create_import(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    with _import_processing_slot():
+        filename, source, file_hash = _prepare_upload(file)
+        try:
+            return commit_import_stream(db, source, filename, file_hash)
+        except ImportInProgressError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=str(exc),
+                headers={"Retry-After": "2"},
+            )
+        except UnicodeDecodeError:
+            raise HTTPException(status_code=400, detail=CSV_ENCODING_ERROR)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except Exception as exc:
+            db.rollback()
+            raise HTTPException(
+                status_code=500, detail="Não foi possível concluir a importação; nenhuma linha foi gravada"
+            ) from exc

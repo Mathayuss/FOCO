@@ -61,6 +61,22 @@ def _batch_item(batch: ImportBatch) -> dict:
     }
 
 
+def find_latest_batch_by_hash(db: Session, file_hash: str) -> dict | None:
+    batch = db.scalar(
+        select(ImportBatch)
+        .where(ImportBatch.file_hash == file_hash)
+        .order_by(ImportBatch.started_at.desc(), ImportBatch.id.desc())
+        .limit(1)
+    )
+    if batch is None:
+        return None
+    return {
+        "id_lote_importacao": batch.id,
+        "situacao": batch.status,
+        "iniciado_em": _iso(batch.started_at),
+    }
+
+
 def list_batches(db: Session, limite: int = 20, deslocamento: int = 0) -> dict:
     total = db.scalar(select(func.count(ImportBatch.id))) or 0
     rows = db.scalars(

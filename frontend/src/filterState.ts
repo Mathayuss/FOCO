@@ -1,4 +1,5 @@
 import type { AnalyticsParams } from "./api"
+import type { PeriodOption } from "./types"
 
 export type GlobalFilters = {
   source: string
@@ -105,6 +106,21 @@ export function sourceLabel(source: string) {
 
 export function periodLabel(period: string) {
   return importedPeriodLabels[period] || importedDynamicPeriodLabel(period) || period
+}
+
+export function preserveFilterSelection(options:string[], value:string){
+  return value && !options.includes(value) ? [value,...options] : options
+}
+
+export function periodKeyForMonth(month:string, options?:PeriodOption[] | null){
+  return options?.find(option => /^\d{4}-(0[1-9]|1[0-2])$/.test(option.key)
+    && option.months.length === 1 && option.months[0] === month)?.key || ""
+}
+
+export function preservePeriodSelection(options:PeriodOption[], value:string){
+  return value && !options.some(option=>option.key===value)
+    ? [{key:value,label:periodLabel(value),months:[]},...options]
+    : options
 }
 
 export function resetFilterPatch(key: FilterKey): Partial<GlobalFilters> {

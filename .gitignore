@@ -10,3 +10,6 @@ dist/
 *.tsbuildinfo
 *.db.backup-*
 documentacao/arq_ref/
+/frontend/test-results/
+/frontend/playwright-report/
+/frontend/blob-report/

@@ -4,10 +4,10 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${BD_USUARIO:-foco}
-      POSTGRES_PASSWORD: ${BD_SENHA:-foco_desenvolvimento}
+      POSTGRES_PASSWORD: ${BD_SENHA:?BD_SENHA obrigatoria; defina a senha no arquivo .env}
       POSTGRES_DB: ${BD_NOME:-foco_ocorrencias}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - dados_postgis:/var/lib/postgresql/data
     healthcheck:
@@ -49,7 +49,7 @@ services:
     restart: unless-stopped
     environment:
       VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api/v1}
-      VITE_LIMITE_IMPORTACAO_MB: ${VITE_LIMITE_IMPORTACAO_MB:-50}
+      VITE_LIMITE_IMPORTACAO_MB: ${VITE_LIMITE_IMPORTACAO_MB:-512}
     depends_on:
       servidor:
         condition: service_healthy

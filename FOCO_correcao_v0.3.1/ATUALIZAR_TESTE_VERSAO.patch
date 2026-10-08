@@ -1,0 +1,6 @@
+diff --git a/backend/tests/test_api.py b/backend/tests/test_api.py
+--- a/backend/tests/test_api.py
++++ b/backend/tests/test_api.py
+@@
+-        assert root["version"] == "0.2.0"
++        assert root["version"] == "0.3.1"

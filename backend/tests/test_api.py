@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
+import hashlib
 import importlib.util
+import inspect
 import json
 from io import BytesIO
 from pathlib import Path
@@ -8,8 +10,11 @@ from xml.sax.saxutils import escape
 from zoneinfo import ZoneInfo
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import create_engine, delete, select, text
+from app.core.config import Settings
 from app.main import app
 from app.api.endpoints import imports as imports_endpoint
 from app.db.session import SessionLocal
@@ -17,7 +22,7 @@ from app.models.import_batch import ImportBatch, RejectedImportLine
 from app.models.occurrence import Occurrence, OccurrenceVehicle
 from app.models.unit import Unit
 from app.models.vehicle import Vehicle
-from app.services import import_audit_service, sejusp_analytics_service
+from app.services import import_audit_service, import_service, sejusp_analytics_service
 
 
 FUSO_LOCAL = ZoneInfo("America/Campo_Grande")
@@ -374,6 +379,60 @@ def test_import_preview_accepts_xlsx_content_renamed_as_xls():
     assert data["valid_rows"] == 1
 
 
+def test_import_preview_uses_first_row_from_hybrid_html_xls():
+    headers = [
+        "Nº/Ano",
+        "Fato",
+        "Data do registro",
+        "Data do fato",
+        "Município",
+        "Tempo de atendimento",
+        "Despacho",
+        "Especial",
+    ]
+    values = [
+        "3736/2026 CMB/1ºGBM",
+        "INCENDIO EM EDIFICACAO",
+        "07/08/2026 - 23:37:03",
+        "07/08/2026 - 22:16:00",
+        "Campo Grande",
+        "01:21:03",
+        "6429993",
+        "Não",
+    ]
+
+    def cells(items: list[str]) -> bytes:
+        return b"".join(
+            b"<td>" + b"".join(bytes((byte, 0)) for byte in item.encode("cp1252")) + b"</td>"
+            for item in items
+        )
+
+    body = (
+        b"<table><thead><tr>"
+        + cells(headers)
+        + b"</tr></thead><tbody><tr>"
+        + cells(values)
+        + b"</tr></tbody></table>"
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/imports/preview",
+            files={"file": ("relatorio.xls", body, "application/vnd.ms-excel")},
+        )
+
+    data = response.json()
+    mappings = {item["source_header"]: item["target_field"] for item in data["column_mappings"]}
+    assert response.status_code == 200
+    assert data["headers"] == headers
+    assert data["total_rows"] == 1
+    assert data["valid_rows"] == 1
+    assert data["registration_years"] == [2026]
+    assert data["can_commit"] is True
+    assert mappings["Tempo de atendimento"] == "tempo_atendimento"
+    assert mappings["Despacho"] == "despacho"
+    assert mappings["Especial"] == "especial"
+
+
 def test_import_preview_accepts_sejusp_xls_html_report_headers():
     body = """<html><body><table>
     <tr><td colspan="11">Relatório de ocorrências</td></tr>
@@ -435,9 +494,165 @@ def test_import_preview_accepts_sejusp_xlsx_report_headers():
     assert "abertura_em" in data["recognized_headers"]
 
 
+def test_import_preview_rejects_ambiguous_duplicate_headers():
+    content = (
+        "Nº/ANO,DATA DO FATO,FATO,MUNICÍPIO,MUNICIPIO\n"
+        "100/2025,01/01/2025,INCENDIO,Campo Grande,Corumbá\n"
+    ).encode("utf-8")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/imports/preview",
+            files={"file": ("duplicada.csv", content, "text/csv")},
+        )
+
+    assert response.status_code == 400
+    assert "colunas ambíguas" in response.json()["detail"]
+    assert "municipio" in response.json()["detail"]
+
+
+def test_import_preview_rejects_corrupted_xlsx_package():
+    body = BytesIO()
+    with ZipFile(body, "w", ZIP_DEFLATED) as workbook:
+        workbook.writestr("arquivo.txt", "não é uma planilha")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/imports/preview",
+            files={
+                "file": (
+                    "corrompida.xlsx",
+                    body.getvalue(),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Arquivo XLSX inválido ou corrompido"
+
+
+def test_import_preview_validates_time_lengths_and_coordinate_ranges():
+    content = (
+        "Nº/ANO,DATA DO FATO,HORA DO FATO,FATO,UNIDADE DE ORIGEM,MUNICÍPIO,LATITUDE,LONGITUDE\n"
+        f"{'X' * 121},01/01/2025,25:99,INCENDIO,1º GBM,Campo Grande,95,-54.62\n"
+    ).encode("utf-8")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/imports/preview",
+            files={"file": ("campos-invalidos.csv", content, "text/csv")},
+        )
+
+    data = response.json()
+    assert response.status_code == 200
+    assert data["valid_rows"] == 0
+    assert data["invalid_coordinate_rows"] == 1
+    assert data["can_commit"] is False
+    assert "id_origem excede 120 caracteres" in data["issues"][0]["issues"]
+    assert "abertura_em inválido" in data["issues"][0]["issues"]
+
+
+def test_import_preview_does_not_allow_header_only_file():
+    content = "id_origem,abertura_em,municipio,tipo\n".encode("utf-8")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/imports/preview",
+            files={"file": ("sem-dados.csv", content, "text/csv")},
+        )
+
+    data = response.json()
+    assert response.status_code == 200
+    assert data["total_rows"] == 0
+    assert data["can_commit"] is False
+    assert "Arquivo sem linhas de dados" in data["validation_errors"]
+
+
+def test_import_preview_reports_physical_row_after_report_title():
+    content = (
+        "Relatório de ocorrências\n"
+        "Nº/ANO,DATA DO FATO,HORA DO FATO,FATO,MUNICÍPIO\n"
+        "SEM-DATA,,08:20,REMOCAO AO PS,Campo Grande\n"
+    ).encode("utf-8")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/imports/preview",
+            files={"file": ("titulo.csv", content, "text/csv")},
+        )
+
+    data = response.json()
+    assert response.status_code == 200
+    assert data["issues"][0]["row"] == 3
+
+
+def test_import_preview_accepts_windows_1252_csv():
+    content = (
+        "Nº/ANO;DATA DO FATO;FATO;MUNICÍPIO\n"
+        "100/2025;01/01/2025;INCÊNDIO;Campo Grande\n"
+    ).encode("cp1252")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/imports/preview",
+            files={"file": ("sejusp-cp1252.csv", content, "text/csv")},
+        )
+
+    data = response.json()
+    assert response.status_code == 200
+    assert data["valid_rows"] == 1
+    assert data["can_commit"] is True
+
+
+def test_import_rejects_csv_invalid_in_utf8_and_windows_1252():
+    content = (
+        b"id_origem,abertura_em,municipio,tipo\n"
+        b"ENC-1,2026-10-01,Campo Grande,INCENDIO\x81\n"
+    )
+
+    with TestClient(app) as client:
+        preview = client.post(
+            "/api/v1/imports/preview",
+            files={"file": ("invalido.csv", content, "text/csv")},
+        )
+        commit = client.post(
+            "/api/v1/imports",
+            files={"file": ("invalido.csv", content, "text/csv")},
+        )
+
+    expected = "CSV deve estar em UTF-8 ou Windows-1252"
+    assert preview.status_code == 400
+    assert preview.json()["detail"] == expected
+    assert commit.status_code == 400
+    assert commit.json()["detail"] == expected
+
+
+def test_import_preview_years_ignore_rejected_rows_and_allow_valid_subset():
+    content = (
+        "Nº/ANO,DATA DO REGISTRO,DATA DO FATO,FATO,MUNICÍPIO\n"
+        "VALIDA-2025,01/01/2025,01/01/2025,INCENDIO,Campo Grande\n"
+        "INVALIDA-2024,01/01/2024,01/01/2024,INCENDIO,\n"
+    ).encode("utf-8")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/imports/preview",
+            files={"file": ("parcial.csv", content, "text/csv")},
+        )
+
+    data = response.json()
+    assert response.status_code == 200
+    assert data["valid_rows"] == 1
+    assert data["invalid_rows"] == 1
+    assert data["registration_years"] == [2025]
+    assert data["can_commit"] is True
+
+
 def test_import_commit_inserts_sejusp_rows_with_equivalent_fields(monkeypatch):
     first = None
     second = None
+    duplicate_preview = None
     cache_clears = 0
 
     def fake_clear_cache():
@@ -462,6 +677,10 @@ def test_import_commit_inserts_sejusp_rows_with_equivalent_fields(monkeypatch):
                 "/api/v1/imports",
                 files={"file": ("sejusp.csv", content, "text/csv")},
             ).json()
+            duplicate_preview = client.post(
+                "/api/v1/imports/preview",
+                files={"file": ("sejusp.csv", content, "text/csv")},
+            ).json()
             second = client.post(
                 "/api/v1/imports",
                 files={"file": ("sejusp.csv", content, "text/csv")},
@@ -471,6 +690,15 @@ def test_import_commit_inserts_sejusp_rows_with_equivalent_fields(monkeypatch):
         assert first["inserted_rows"] == 1
         assert first["skipped_duplicate_rows"] == 0
         assert first["source_scope"] == "RELATORIO_SEJUSP"
+        assert duplicate_preview["already_imported"] is True
+        assert duplicate_preview["previous_import_batch_id"] == first["id_lote_importacao"]
+        assert duplicate_preview["previous_import_status"] == "concluido"
+        assert duplicate_preview["previous_import_at"]
+        assert duplicate_preview["existing_rows"] == 1
+        assert duplicate_preview["new_rows"] == 0
+        assert any("já foi processado" in warning for warning in duplicate_preview["warnings"])
+        assert any("já existem" in warning for warning in duplicate_preview["warnings"])
+        assert duplicate_preview["can_commit"] is True
         assert second["inserted_rows"] == 0
         assert second["skipped_duplicate_rows"] == 1
         assert cache_clears == 1
@@ -500,6 +728,99 @@ def test_import_commit_inserts_sejusp_rows_with_equivalent_fields(monkeypatch):
             db.close()
     finally:
         batch_ids = [item["id_lote_importacao"] for item in (first, second) if item]
+        _cleanup_imported_test_data([source_id], [unit_name], batch_ids)
+
+
+def test_reprocessing_duplicate_does_not_create_orphan_unit():
+    first = None
+    second = None
+    source_id = f"UNIDADE-{uuid4()}"
+    original_unit = f"UNIDADE ORIGINAL {uuid4()}"
+    changed_unit = f"UNIDADE DUPLICADA {uuid4()}"
+
+    def content(unit_name: str) -> bytes:
+        return (
+            "Nº/ANO,DATA DO REGISTRO,DATA DO FATO,FATO,UNIDADE DE ORIGEM,MUNICÍPIO\n"
+            f"{source_id},01/10/2026,01/10/2026,INCENDIO,{unit_name},Campo Grande\n"
+        ).encode("utf-8")
+
+    try:
+        with TestClient(app) as client:
+            first_response = client.post(
+                "/api/v1/imports",
+                files={"file": ("original.csv", content(original_unit), "text/csv")},
+            )
+            second_response = client.post(
+                "/api/v1/imports",
+                files={"file": ("duplicada.csv", content(changed_unit), "text/csv")},
+            )
+
+        assert first_response.status_code == 200
+        assert second_response.status_code == 200
+        first = first_response.json()
+        second = second_response.json()
+        assert first["inserted_rows"] == 1
+        assert second["inserted_rows"] == 0
+        assert second["skipped_duplicate_rows"] == 1
+
+        db = SessionLocal()
+        try:
+            original = db.scalar(select(Unit).where(Unit.name == original_unit))
+            orphan = db.scalar(select(Unit).where(Unit.name == changed_unit))
+            assert original is not None
+            assert orphan is None
+        finally:
+            db.close()
+    finally:
+        batch_ids = [item["id_lote_importacao"] for item in (first, second) if item]
+        _cleanup_imported_test_data(
+            [source_id],
+            [original_unit, changed_unit],
+            batch_ids,
+        )
+
+
+def test_import_normalizes_fields_but_preserves_original_cell_values():
+    result = None
+    source_id = f"RASTREIO-{uuid4()}"
+    unit_name = f"UNIDADE RASTREIO {uuid4()}"
+    content = (
+        "Nº/ANO,DATA DO REGISTRO,DATA DO FATO,FATO,UNIDADE DE ORIGEM,MUNICÍPIO\n"
+        f"  {source_id}  , 01/10/2026 , 01/10/2026 ,  INCENDIO  ,"
+        f"  {unit_name}  ,  Campo Grande  \n"
+    ).encode("utf-8")
+
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/imports",
+                files={"file": ("rastreio.csv", content, "text/csv")},
+            )
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["inserted_rows"] == 1
+
+        db = SessionLocal()
+        try:
+            row = db.scalar(
+                select(Occurrence).where(
+                    Occurrence.source == "RELATORIO_SEJUSP",
+                    Occurrence.source_id == source_id,
+                )
+            )
+            assert row is not None
+            assert row.type_name == "INCENDIO"
+            assert row.municipality == "Campo Grande"
+            assert row.unit and row.unit.name == unit_name
+            payload = json.loads(row.source_payload or "{}")
+            assert payload["Nº/ANO"] == f"  {source_id}  "
+            assert payload["FATO"] == "  INCENDIO  "
+            assert payload["MUNICÍPIO"] == "  Campo Grande  "
+        finally:
+            db.close()
+    finally:
+        batch_ids = [result["id_lote_importacao"]] if result else []
         _cleanup_imported_test_data([source_id], [unit_name], batch_ids)
 
 
@@ -894,6 +1215,18 @@ def test_csv_preview_rejects_path_like_filename():
         assert r.json()["detail"] == "Nome de arquivo inválido"
 
 
+def test_csv_preview_rejects_filename_larger_than_database_limit():
+    filename = f"{'a' * 252}.csv"
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/imports/preview",
+            files={"file": (filename, b"id_origem\nEX-001\n", "text/csv")},
+        )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Nome de arquivo inválido"
+
+
 def test_csv_preview_rejects_empty_file():
     with TestClient(app) as client:
         r = client.post(
@@ -904,11 +1237,236 @@ def test_csv_preview_rejects_empty_file():
         assert r.json()["detail"] == "Arquivo vazio"
 
 
-def test_import_upload_limit_is_50_mb():
-    assert imports_endpoint.MAX_IMPORT_MEGABYTES == 50
-    assert imports_endpoint.MAX_IMPORT_BYTES == 50 * 1024 * 1024
-    assert imports_endpoint.MAX_CSV_MEGABYTES == 50
-    assert imports_endpoint.MAX_CSV_BYTES == 50 * 1024 * 1024
+def test_import_upload_limit_is_512_mb():
+    assert imports_endpoint.MAX_IMPORT_MEGABYTES == 512
+    assert imports_endpoint.MAX_IMPORT_BYTES == 512 * 1024 * 1024
+    assert imports_endpoint.MAX_CSV_MEGABYTES == 512
+    assert imports_endpoint.MAX_CSV_BYTES == 512 * 1024 * 1024
+
+
+def test_import_upload_limit_cannot_exceed_512_mb():
+    try:
+        Settings(limite_importacao_mb=513, _env_file=None)
+    except ValidationError:
+        return
+    raise AssertionError("limite acima de 512 MB deveria ser rejeitado")
+
+
+def test_import_routes_run_outside_event_loop():
+    assert inspect.iscoroutinefunction(imports_endpoint.import_preview) is False
+    assert inspect.iscoroutinefunction(imports_endpoint.csv_preview) is False
+    assert inspect.iscoroutinefunction(imports_endpoint.create_import) is False
+
+
+def test_import_rejects_known_oversized_file_without_reading(monkeypatch):
+    class UnreadableFile:
+        def seek(self, *_):
+            raise AssertionError("arquivo acima do limite não deveria ser aberto")
+
+        def read(self, *_):
+            raise AssertionError("arquivo acima do limite não deveria ser lido")
+
+    class OversizedUpload:
+        filename = "grande.csv"
+        content_type = "text/csv"
+        size = 65
+        file = UnreadableFile()
+
+    monkeypatch.setattr(imports_endpoint, "MAX_IMPORT_MEGABYTES", 1)
+    monkeypatch.setattr(imports_endpoint, "MAX_IMPORT_BYTES", 64)
+    try:
+        imports_endpoint._prepare_upload(OversizedUpload())
+    except HTTPException as exc:
+        assert exc.status_code == 413
+        assert exc.detail == "Arquivo excede o limite de 1 MB"
+        return
+    raise AssertionError("arquivo acima do limite deveria ser rejeitado")
+
+
+def test_prepare_upload_reads_in_chunks_and_calculates_hash():
+    content = b"id_origem,abertura_em,municipio,tipo\nEX-1,2026-01-01,CG,TESTE\n"
+
+    class ChunkOnlyFile(BytesIO):
+        def read(self, size=-1):
+            assert size == imports_endpoint.UPLOAD_READ_CHUNK_BYTES
+            return super().read(size)
+
+    class Upload:
+        filename = "arquivo.csv"
+        content_type = "text/csv"
+        size = None
+        file = ChunkOnlyFile(content)
+
+    filename, source, file_hash = imports_endpoint._prepare_upload(Upload())
+
+    assert filename == "arquivo.csv"
+    assert source.tell() == 0
+    assert file_hash == hashlib.sha256(content).hexdigest()
+
+
+def test_prepare_upload_rejects_unknown_size_when_stream_exceeds_limit(monkeypatch):
+    class Upload:
+        filename = "grande.csv"
+        content_type = "text/csv"
+        size = None
+        file = BytesIO(b"x" * 65)
+
+    monkeypatch.setattr(imports_endpoint, "MAX_IMPORT_MEGABYTES", 1)
+    monkeypatch.setattr(imports_endpoint, "MAX_IMPORT_BYTES", 64)
+    monkeypatch.setattr(imports_endpoint, "UPLOAD_READ_CHUNK_BYTES", 16)
+
+    try:
+        imports_endpoint._prepare_upload(Upload())
+    except HTTPException as exc:
+        assert exc.status_code == 413
+        assert exc.detail == "Arquivo excede o limite de 1 MB"
+        return
+    raise AssertionError("fluxo sem tamanho conhecido deveria respeitar o limite")
+
+
+def test_csv_stream_preview_matches_legacy_parser_without_unbounded_read():
+    content = (
+        "titulo do relatorio\n"
+        "Nº/ANO;DATA DO REGISTRO;HORA DO REGISTRO;DATA DO FATO;HORA DO FATO;"
+        "FATO;UNIDADE DE ORIGEM;MUNICÍPIO\n"
+        "200/2026;01/10/2026;08:10;01/10/2026;08:00;INCÊNDIO;1º GBM;Campo Grande\n"
+    ).encode("cp1252")
+
+    class ChunkOnlyFile(BytesIO):
+        def read(self, size=-1):
+            assert size >= 0, "CSV incremental não deve executar leitura ilimitada"
+            return super().read(size)
+
+    legacy = import_service.preview_import(content, "comparacao.csv")
+    streamed = import_service.preview_import_stream(
+        ChunkOnlyFile(content), "comparacao.csv"
+    )
+
+    assert streamed == legacy
+    assert streamed["total_rows"] == 1
+    assert streamed["valid_rows"] == 1
+    assert streamed["registration_years"] == [2026]
+
+
+def test_csv_preview_light_mode_preserves_result_without_retaining_records():
+    header = "Nº/ANO,DATA DO REGISTRO,DATA DO FATO,FATO,MUNICÍPIO\n"
+    invalid_rows = "".join(
+        f"INVALIDA-{index},01/10/2025,01/10/2025,INCENDIO,\n"
+        for index in range(60)
+    )
+    valid_row = "VALIDA-2026,01/10/2026,01/10/2026,INCENDIO,Campo Grande\n"
+    content = (header + invalid_rows + valid_row).encode("utf-8")
+
+    complete = import_service._parsed_import_stream(
+        BytesIO(content),
+        "memoria.csv",
+        retain_records=True,
+    )
+    lightweight = import_service._parsed_import_stream(
+        BytesIO(content),
+        "memoria.csv",
+        retain_records=False,
+    )
+
+    assert import_service._public_preview(lightweight) == import_service._public_preview(
+        complete
+    )
+    assert len(complete["_records"]) == 61
+    assert lightweight["_records"] == []
+    assert lightweight["_valid_source_ids"] == ["VALIDA-2026"]
+    assert len(lightweight["issues"]) == 50
+    assert lightweight["registration_years"] == [2026]
+    assert "A prévia exibe 50 de 60 linha(s) inválida(s)" in lightweight["warnings"]
+
+
+def test_import_preview_rejects_parallel_processing(monkeypatch):
+    class OccupiedSemaphore:
+        def acquire(self, blocking=False):
+            assert blocking is False
+            return False
+
+        def release(self):
+            raise AssertionError("semáforo não adquirido não pode ser liberado")
+
+    monkeypatch.setattr(
+        imports_endpoint, "_IMPORT_PROCESSING_SEMAPHORE", OccupiedSemaphore()
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/imports/preview",
+            files={"file": ("ocupada.csv", b"id_origem\nEX-001\n", "text/csv")},
+        )
+
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "2"
+    assert "Outra importação" in response.json()["detail"]
+
+
+def test_import_commit_returns_503_when_database_lock_is_busy(monkeypatch):
+    def busy_commit(*_args, **_kwargs):
+        raise import_service.ImportInProgressError("confirmação concorrente")
+
+    monkeypatch.setattr(imports_endpoint, "commit_import_stream", busy_commit)
+    content = (
+        "id_origem,abertura_em,municipio,tipo\n"
+        "LOCK-1,2026-10-01,Campo Grande,INCENDIO\n"
+    ).encode("utf-8")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/imports",
+            files={"file": ("concorrente.csv", content, "text/csv")},
+        )
+
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "2"
+    assert response.json()["detail"] == "confirmação concorrente"
+
+
+def test_import_transaction_lock_rolls_back_when_postgres_is_busy():
+    class Dialect:
+        name = "postgresql"
+
+    class Bind:
+        dialect = Dialect()
+
+    class BusyDatabase:
+        rolled_back = False
+
+        def get_bind(self):
+            return Bind()
+
+        def scalar(self, statement):
+            assert "pg_try_advisory_xact_lock" in str(statement)
+            return False
+
+        def rollback(self):
+            self.rolled_back = True
+
+    database = BusyDatabase()
+    try:
+        import_service._acquire_import_transaction_lock(database)
+    except import_service.ImportInProgressError:
+        assert database.rolled_back is True
+        return
+    raise AssertionError("lock PostgreSQL ocupado deveria impedir a confirmação")
+
+
+def test_import_transaction_lock_is_not_required_outside_postgres():
+    class Dialect:
+        name = "sqlite"
+
+    class Bind:
+        dialect = Dialect()
+
+    class SQLiteDatabase:
+        def get_bind(self):
+            return Bind()
+
+        def scalar(self, _statement):
+            raise AssertionError("SQLite não deve executar advisory lock")
+
+    import_service._acquire_import_transaction_lock(SQLiteDatabase())
 
 
 def test_csv_preview_rejects_large_file(monkeypatch):

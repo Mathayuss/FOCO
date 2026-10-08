@@ -8,6 +8,7 @@ from app.db.session import SessionLocal
 from app.main import app
 from app.models.occurrence import Occurrence
 from app.models.unit import Unit
+from app.services import dashboard_service
 from app.services import sejusp_analytics_service as analytics
 
 
@@ -36,6 +37,12 @@ def ocorrencias_dashboard():
 
 @pytest.mark.parametrize("params", [
     {},
+    {"period": "2025-02"},
+    {"type": "RESGATE"},
+    {"municipality": "DOURADOS"},
+    {"unit": "UNIDADE TESTE"},
+    {"subtype": "SUBTIPO TESTE"},
+    {"shift": "Noite"},
     {"period": "2025-02", "type": "INCENDIO", "municipality": "CAMPO GRANDE",
      "unit": "UNIDADE TESTE", "subtype": "SUBTIPO TESTE", "shift": "Manhã"},
 ])
@@ -62,6 +69,102 @@ def test_dashboard_handles_empty_database():
         assert dashboard["types"]["items"] == []
         assert dashboard["hours"]["items"] == [0] * 24
         assert dashboard["sla"]["sample_size"] == 0
+
+
+def test_dashboard_empty_slice_has_no_top_demand(ocorrencias_dashboard):
+    with TestClient(app) as client:
+        params = {"period": "2025-01", "type": "RESGATE", "municipality": "DOURADOS"}
+        empty = client.get("/api/v1/analytics/dashboard", params=params)
+        assert empty.status_code == 200
+        overview = empty.json()["overview"]
+        assert overview["total"] == 0
+        assert overview["applied_filters"]["type"] == "RESGATE"
+        assert overview["applied_filters"]["municipality"] == "DOURADOS"
+        assert overview["top_type"] == ""
+        assert overview["top_municipality"] == ""
+
+        params["period"] = "2025-02"
+        populated = client.get("/api/v1/analytics/dashboard", params=params)
+        assert populated.status_code == 200
+        overview = populated.json()["overview"]
+        assert overview["total"] == 1
+        assert overview["top_type"] == "RESGATE"
+        assert overview["top_municipality"] == "DOURADOS"
+
+
+def test_dashboard_zero_baseline_has_no_percentage():
+    with SessionLocal() as db:
+        for month, type_name in [(1, "OUTRO"), (2, "OUTRO"), (3, "ALVO")]:
+            db.add(Occurrence(
+                source=analytics.SOURCE_SCOPE,
+                source_id=f"COMPARACAO-ZERO-{month}",
+                opened_at=datetime(2025, month, 10, 9, tzinfo=ZoneInfo("America/Campo_Grande")),
+                type_name=type_name,
+                municipality="MUNICIPIO TESTE",
+            ))
+        db.commit()
+
+    with TestClient(app) as client:
+        params = {"period": "2025-02", "type": "ALVO"}
+        response = client.get("/api/v1/analytics/dashboard", params=params)
+        assert response.status_code == 200
+        dashboard = response.json()
+        comparison = dashboard["overview"]["comparison"]
+        assert comparison["available"] is True
+        assert comparison["current_total"] == 0
+        assert comparison["baseline_total"] == 0
+        assert comparison["delta_abs"] == 0
+        assert comparison["delta_pct"] is None
+        assert dashboard["overview"]["delta_pct"] is None
+        assert comparison["reason"] == "A base anterior não possui ocorrências para calcular a variação percentual."
+        assert dashboard["monthly"]["comparison"] == [{
+            "current_month": "Fev/2025", "baseline_month": "Jan/2025",
+            "current": 0, "baseline": 0, "delta": 0,
+        }]
+
+
+def test_dashboard_compares_year_with_equivalent_months_from_previous_year():
+    with SessionLocal() as db:
+        for year, last_month, occurrences_per_month in [(2025, 6, 1), (2026, 8, 2)]:
+            for month in range(1, last_month + 1):
+                for sequence in range(occurrences_per_month):
+                    db.add(Occurrence(
+                        source=analytics.SOURCE_SCOPE,
+                        source_id=f"COMPARACAO-ANUAL-{year}-{month}-{sequence}",
+                        opened_at=datetime(year, month, 10, 9, tzinfo=ZoneInfo("America/Campo_Grande")),
+                        registered_at=datetime(year, month, 10, 9, tzinfo=ZoneInfo("America/Campo_Grande")),
+                        type_name="TIPO TESTE",
+                        municipality="MUNICIPIO TESTE",
+                    ))
+        db.commit()
+
+    with TestClient(app) as client:
+        response = client.get("/api/v1/analytics/dashboard", params={"period": "ano-2026"})
+
+    assert response.status_code == 200
+    dashboard = response.json()
+    comparison = dashboard["overview"]["comparison"]
+    assert dashboard["overview"]["total"] == 16
+    assert comparison == {
+        "available": True,
+        "current_label": "Jan-Jun/2026",
+        "baseline_label": "Jan-Jun/2025",
+        "current_total": 12,
+        "baseline_total": 6,
+        "delta_abs": 6,
+        "delta_pct": 100.0,
+        "reason": "Comparação limitada aos meses equivalentes com cobertura nos dois anos: Jan-Jun.",
+        "source_scope": "sejusp_importado",
+    }
+    assert len(dashboard["monthly"]["items"]) == 8
+    assert len(dashboard["monthly"]["comparison"]) == 6
+    assert dashboard["monthly"]["comparison"][-1] == {
+        "current_month": "Jun/2026",
+        "baseline_month": "Jun/2025",
+        "current": 2,
+        "baseline": 1,
+        "delta": 1,
+    }
 
 
 @pytest.mark.parametrize("params,field", [
@@ -109,3 +212,142 @@ def test_dataset_snapshot_is_released_after_error(ocorrencias_dashboard):
         ))
         db.commit()
         assert len(analytics._rows(db)) == 4
+
+
+def test_dashboard_reuses_periods_and_filtered_rows(ocorrencias_dashboard, monkeypatch):
+    chamadas = {"periodos": 0, "filtros": 0}
+    periodos_original = analytics._period_defs
+    filtros_original = analytics._filtered_rows
+
+    def periodos(*args, **kwargs):
+        chamadas["periodos"] += 1
+        return periodos_original(*args, **kwargs)
+
+    def filtros(*args, **kwargs):
+        chamadas["filtros"] += 1
+        return filtros_original(*args, **kwargs)
+
+    monkeypatch.setattr(analytics, "_period_defs", periodos)
+    monkeypatch.setattr(analytics, "_filtered_rows", filtros)
+    with SessionLocal() as db:
+        with analytics.dataset_snapshot(db):
+            assert analytics.validate_filter_params(db, period="all") == []
+            resultado = dashboard_service.snapshot(db, period="all")
+    assert resultado["overview"]["total"] == 3
+    assert chamadas == {"periodos": 1, "filtros": 1}
+
+
+def test_filter_metadata_is_built_once_per_selection(ocorrencias_dashboard, monkeypatch):
+    chamadas = []
+    original = analytics._build_filter_metadata
+
+    def contar(*args, **kwargs):
+        chamadas.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(analytics, "_build_filter_metadata", contar)
+    with SessionLocal() as db:
+        resultado = dashboard_service.snapshot(db, period="2025-02", type_name="INCENDIO")
+    assert resultado["overview"]["total"] == 1
+    assert len(chamadas) == 1
+
+
+def test_filter_metadata_returns_independent_values(ocorrencias_dashboard):
+    with SessionLocal() as db:
+        with analytics.dataset_snapshot(db):
+            primeira = analytics.filter_metadata(db, period="2025-02")
+            primeira["coverage"]["months"].clear()
+            primeira["available_periods"][0]["months"].clear()
+            primeira["applied_filters"]["type"] = "ALTERADO"
+            primeira["unavailable_filters"].append("ALTERADO")
+            segunda = analytics.filter_metadata(db, period="2025-02")
+            assert segunda["coverage"]["months"] == ["Fev/2025"]
+            assert segunda["available_periods"][0]["months"] == ["Jan/2025", "Fev/2025"]
+            assert segunda["applied_filters"]["type"] is None
+            assert segunda["unavailable_filters"] == []
+
+
+def test_snapshot_cache_does_not_outlive_request(ocorrencias_dashboard):
+    with SessionLocal() as db:
+        primeira = dashboard_service.snapshot(db, period="all")
+        db.add(Occurrence(
+            source=analytics.SOURCE_SCOPE,
+            source_id="DASHBOARD-NOVA",
+            opened_at=datetime(2025, 2, 11, 9),
+            type_name="RESGATE",
+            municipality="DOURADOS",
+        ))
+        db.commit()
+        segunda = dashboard_service.snapshot(db, period="all")
+    assert primeira["overview"]["total"] == 3
+    assert segunda["overview"]["total"] == 4
+    assert segunda["types"]["items"][0]["total"] == 2
+
+
+def test_nested_snapshot_keeps_parent_and_isolates_sessions(ocorrencias_dashboard):
+    with SessionLocal() as primeira, SessionLocal() as segunda:
+        with analytics.dataset_snapshot(primeira):
+            estado = primeira.info[analytics._SNAPSHOT_ROWS_KEY]
+            with analytics.dataset_snapshot(primeira):
+                assert analytics.overview(primeira, type_name="INCENDIO")["total"] == 2
+            assert primeira.info[analytics._SNAPSHOT_ROWS_KEY] is estado
+            outro = dashboard_service.snapshot(segunda, type_name="RESGATE")
+            assert outro["overview"]["total"] == 1
+            assert analytics._SNAPSHOT_ROWS_KEY not in segunda.info
+            assert analytics.overview(primeira, type_name="INCENDIO")["total"] == 2
+        assert analytics._SNAPSHOT_ROWS_KEY not in primeira.info
+
+
+@pytest.mark.parametrize("filtros", [
+    {"period": "2025-02", "type_name": "INCENDIO"},
+    {"period": "2025-02", "municipality": "DOURADOS"},
+    {"period": "", "type_name": ""},
+    {"shift": "Noite"},
+])
+def test_snapshot_preserves_standalone_analytics(ocorrencias_dashboard, filtros):
+    paineis = ["filter_options", "overview", "monthly", "types", "cities", "hours", "units", "shifts"]
+    with SessionLocal() as db:
+        esperados = {nome: getattr(analytics, nome)(db, **filtros) for nome in paineis}
+        with analytics.dataset_snapshot(db):
+            atuais = {nome: getattr(analytics, nome)(db, **filtros) for nome in paineis}
+    assert atuais == esperados
+
+
+def test_combined_filters_are_computed_once_per_key(ocorrencias_dashboard, monkeypatch):
+    chaves = []
+    original = analytics._filtered_rows
+
+    def contar(rows, *args, **kwargs):
+        chaves.append(args)
+        return original(rows, *args, **kwargs)
+
+    monkeypatch.setattr(analytics, "_filtered_rows", contar)
+    with SessionLocal() as db:
+        resultado = dashboard_service.snapshot(db, period="2025-02", type_name="INCENDIO")
+    assert resultado["overview"]["total"] == 1
+    assert set(chaves) == {
+        (None, "INCENDIO", None, None, None, None),
+        ("2025-02", None, None, None, None, None),
+        ("2025-02", "INCENDIO", None, None, None, None),
+    }
+    assert len(chaves) == 3
+
+
+def test_empty_filters_share_rows_without_changing_metadata(ocorrencias_dashboard, monkeypatch):
+    chamadas = []
+    original = analytics._filtered_rows
+
+    def contar(*args, **kwargs):
+        chamadas.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(analytics, "_filtered_rows", contar)
+    with SessionLocal() as db:
+        with analytics.dataset_snapshot(db):
+            vazios = analytics.overview(db, period="", type_name="")
+            todos = analytics.overview(db, period="all")
+            ausentes = analytics.overview(db)
+    assert vazios["total"] == todos["total"] == ausentes["total"] == 3
+    assert vazios["applied_filters"]["type"] == ""
+    assert todos["applied_filters"]["type"] is None
+    assert len(chamadas) == 1

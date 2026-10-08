@@ -1,0 +1,5 @@
+backend/app/core/config.py: OK
+backend/app/main.py: OK
+backend/app/api/endpoints/imports.py: OK
+backend/migracoes/env.py: OK
+frontend/package.json: JSON OK

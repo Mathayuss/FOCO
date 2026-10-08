@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from "react"
 import { api } from "../api"
+import ImportProgressDialog, { type ImportDialogError, type ImportProgressState } from "../components/ImportProgressDialog"
 import type { SetGlobalFilters } from "../filterState"
 import type { CsvPreview, ImportBatch, ImportCommit } from "../types"
 
 const pct=(part:number,total:number)=>total?`${Math.round(part/total*100)}%`:"0%"
 const dateTime=(value:string|null)=>value?new Date(value).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"}):"-"
 const limiteImportacaoConfigurado=Number(import.meta.env.VITE_LIMITE_IMPORTACAO_MB)
-const limiteImportacaoMb=Number.isInteger(limiteImportacaoConfigurado) && limiteImportacaoConfigurado>0 ? limiteImportacaoConfigurado : 50
+const limiteImportacaoMb=Number.isInteger(limiteImportacaoConfigurado) && limiteImportacaoConfigurado>0 ? limiteImportacaoConfigurado : 512
 const limiteImportacaoBytes=limiteImportacaoMb*1024*1024
 const SEJUSP_DASHBOARD_FILTERS = {source:"sejusp",period:"all",type:"",municipality:"",unit:"",subtype:"",shift:""}
 const yearList=(years?:number[])=>years?.length?years.join(", "):"-"
@@ -30,6 +31,9 @@ export default function Imports({setGlobalFilters,onShowDashboard}:ImportsProps)
  const [batchTotal,setBatchTotal]=useState(0)
  const [batchError,setBatchError]=useState("")
  const [error,setError]=useState("")
+ const [progress,setProgress]=useState<ImportProgressState|null>(null)
+ const [dialogError,setDialogError]=useState<ImportDialogError|null>(null)
+ const [dialogOpen,setDialogOpen]=useState(false)
 
  async function loadBatches(){
   try{
@@ -46,41 +50,59 @@ export default function Imports({setGlobalFilters,onShowDashboard}:ImportsProps)
 
  async function handleFile(next:File|null){
   setFile(next); setPreview(null); setCommit(null); setDashboardReady(false); setError("")
+  setDialogError(null); setProgress(null); setDialogOpen(Boolean(next))
   if(!next) return
-    if(next.size>limiteImportacaoBytes){
-     setError(`Arquivo excede o limite de ${limiteImportacaoMb} MB`)
+  if(next.size>limiteImportacaoBytes){
+   const message=`Arquivo excede o limite de ${limiteImportacaoMb} MB`
+   setError(message)
+   setDialogError({operation:"preview",message})
    return
   }
   setLoading(true)
-  try{ setPreview(await api.previewCsv(next)) }
-  catch(e){ setError(e instanceof Error ? e.message : "Falha ao analisar arquivo") }
-  finally{ setLoading(false) }
+  setProgress({operation:"preview",phase:"upload",percent:0})
+  try{
+   setPreview(await api.previewCsv(next,percent=>setProgress({operation:"preview",phase:percent<100?"upload":"process",percent})))
+  }
+  catch(e){
+   const message=e instanceof Error ? e.message : "Falha ao analisar arquivo"
+   setError(message)
+   setDialogError({operation:"preview",message})
+  }
+  finally{ setLoading(false); setProgress(null) }
  }
 
  async function commitFile(){
-  if(!file || !preview?.valid_rows) return
-  setCommitting(true); setError("")
+  if(!file || !preview?.can_commit) return
+  setCommitting(true); setError(""); setCommit(null); setDialogError(null); setDialogOpen(true)
+  setProgress({operation:"commit",phase:"upload",percent:0})
   try{
-   const result = await api.commitImport(file)
+   const result = await api.commitImport(file,percent=>setProgress({operation:"commit",phase:percent<100?"upload":"process",percent}))
    setCommit(result)
+   setProgress({operation:"commit",phase:"history",percent:100})
    await loadBatches()
    if(result.source_scope==="RELATORIO_SEJUSP" && (result.inserted_rows>0 || result.skipped_duplicate_rows>0)){
     setGlobalFilters(dashboardFilters(result.registration_years))
     setDashboardReady(true)
    }
   }
-  catch(e){ setError(e instanceof Error ? e.message : "Falha ao importar arquivo") }
-  finally{ setCommitting(false) }
+  catch(e){
+   const message=e instanceof Error ? e.message : "Falha ao importar arquivo"
+   setError(message)
+   setDialogError({operation:"commit",message})
+  }
+  finally{ setCommitting(false); setProgress(null) }
  }
 
  function openSejuspDashboard(){
+  setDialogOpen(false)
   setGlobalFilters(dashboardFilters(commit?.registration_years))
   onShowDashboard()
  }
 
- const status = preview?.can_commit ? "Pronto para validação final" : preview ? "Pendências encontradas" : loading ? "Analisando arquivo" : "Aguardando arquivo"
+ const status = preview?.can_commit ? (preview.already_imported ? "Arquivo já processado" : preview.new_rows===0 ? "Ocorrências já existentes" : preview.invalid_rows ? "Pronto com ressalvas" : "Pronto para importar") : preview ? "Importação bloqueada" : loading ? "Analisando arquivo" : "Aguardando arquivo"
  return <>
-  <div className="pageHead"><div><div className="eyebrow">DADOS / IMPORTAÇÕES</div><h1>Importações</h1><p>Pré-validação de arquivos CSV/XLS/XLSX antes de consolidar ocorrências operacionais.</p></div><span className={`badge ${preview?.can_commit?"ok":"warn"}`}>{status}</span></div>
+  {file && dialogOpen && <ImportProgressDialog file={file} progress={progress} preview={preview} result={commit} error={dialogError} dashboardReady={dashboardReady} onCommit={commitFile} onClose={()=>setDialogOpen(false)} onOpenDashboard={openSejuspDashboard}/>}
+  <div className="pageHead"><div><div className="eyebrow">DADOS / IMPORTAÇÕES</div><h1>Importações</h1><p>Pré-validação de arquivos CSV/XLS/XLSX antes de consolidar ocorrências operacionais.</p></div><span className={`badge ${preview?.can_commit && !preview.already_imported && preview.new_rows>0?"ok":"warn"}`}>{status}</span></div>
   <div className="importGrid">
    <section className="uploadPanel">
     <label className={`dropZone ${loading?"loading":""}`}>
@@ -91,14 +113,17 @@ export default function Imports({setGlobalFilters,onShowDashboard}:ImportsProps)
     </label>
     {error && <div className="errorBox">{error}</div>}
     <div className="importNote"><b>Escopo atual</b><span>Preview, equivalência de colunas, regras mínimas, duplicidade e insert das linhas válidas.</span></div>
-    <button className="importAction" disabled={!file || !preview?.valid_rows || loading || committing} onClick={commitFile}>{committing?"Importando":"Importar linhas válidas"}</button>
+    <button className="importAction" disabled={!file || !preview?.can_commit || loading || committing} onClick={commitFile}>{committing?"Importando":preview?.new_rows===0?"Registrar reprocessamento":"Importar linhas válidas"}</button>
     {commit && <div className="importResult"><b>Importação concluída</b><span>Lote #{commit.id_lote_importacao} · {commit.inserted_rows} inseridas · {commit.skipped_duplicate_rows} duplicadas · {commit.invalid_rows} inválidas</span>{dashboardReady && <><small>Fonte SEJUSP ativada {dashboardScope(commit.registration_years)}.</small><button type="button" onClick={openSejuspDashboard}>Abrir dashboard SEJUSP</button></>}</div>}
    </section>
    <section className="panel importPanel"><header><div><b>Resumo do arquivo</b><small>Retorno da API de importação</small></div></header><div className="panelBody importSummary">
     <div className="metricRow"><span>Linhas</span><b>{preview?.total_rows ?? "-"}</b></div>
     <div className="metricRow good"><span>Válidas</span><b>{preview ? `${preview.valid_rows} · ${pct(preview.valid_rows, preview.total_rows)}` : "-"}</b></div>
     <div className="metricRow bad"><span>Inválidas</span><b>{preview ? `${preview.invalid_rows} · ${pct(preview.invalid_rows, preview.total_rows)}` : "-"}</b></div>
+    <div className="metricRow good"><span>Novas</span><b>{preview?.new_rows ?? "-"}</b></div>
+    <div className="metricRow"><span>Já existentes</span><b>{preview?.existing_rows ?? "-"}</b></div>
     <div className="metricRow"><span>Colunas reconhecidas</span><b>{preview?.recognized_headers.length ?? "-"}</b></div>
+    <div className="metricRow"><span>Importação anterior</span><b>{preview?.already_imported ? `Lote #${preview.previous_import_batch_id}` : preview ? "Não encontrada" : "-"}</b></div>
     <div className="metricRow"><span>Perfil</span><b>{preview?.source_profile?.replace("RELATORIO_","") ?? "-"}</b></div>
     <div className="metricRow"><span>Ano do registro</span><b>{yearList(preview?.registration_years)}</b></div>
     <div className="metricRow"><span>Sigilo</span><b>{preview?.sensitive_rows ?? "-"}</b></div>
@@ -111,6 +136,7 @@ export default function Imports({setGlobalFilters,onShowDashboard}:ImportsProps)
   <div className="grid twoOne">
    <section className="panel"><header><div><b>Colunas</b><small>Reconhecimento canônico</small></div></header><div className="panelBody columnAudit">
     <div><span>Reconhecidas</span><div className="chipList">{preview?.recognized_headers.length ? preview.recognized_headers.map(h=><i key={h}>{h}</i>) : <small>Nenhum arquivo analisado.</small>}</div></div>
+    {preview?.validation_errors?.length ? <div><span>Bloqueios da importação</span><div className="chipList missing">{preview.validation_errors.map(item=><i key={item}>{item}</i>)}</div></div> : null}
     <div><span>Obrigatórias ausentes</span><div className="chipList missing">{preview?.missing_required_headers.length ? preview.missing_required_headers.map(h=><i key={h}>{h}</i>) : <small>Sem pendências de cabeçalho.</small>}</div></div>
     <div><span>Equivalências detectadas</span><div className="mappingList">{preview?.column_mappings?.length ? preview.column_mappings.filter(item=>item.target_field).map(item=><i key={`${item.source_header}-${item.target_field}`}><b>{item.source_header}</b><span>{item.target_field}</span></i>) : <small>Nenhum arquivo analisado.</small>}</div></div>
     {preview?.warnings?.length ? <div><span>Avisos</span><div className="chipList missing">{preview.warnings.map(item=><i key={item}>{item}</i>)}</div></div> : null}

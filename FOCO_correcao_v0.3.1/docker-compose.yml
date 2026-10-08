@@ -1,0 +1,48 @@
+services:
+  bd:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: ${BD_USUARIO:-foco}
+      POSTGRES_PASSWORD: ${BD_SENHA:-foco_desenvolvimento}
+      POSTGRES_DB: ${BD_NOME:-foco_ocorrencias}
+    ports:
+      - "5432:5432"
+    volumes:
+      - dados_postgis:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${BD_USUARIO:-foco} -d ${BD_NOME:-foco_ocorrencias}"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  servidor:
+    build: ./backend
+    env_file:
+      - .env
+    depends_on:
+      bd:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+
+  interface:
+    build: ./frontend
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api/v1}
+    depends_on:
+      - servidor
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: pnpm run dev -- --host 0.0.0.0
+
+volumes:
+  dados_postgis:
