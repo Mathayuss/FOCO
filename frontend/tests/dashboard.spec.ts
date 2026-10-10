@@ -132,6 +132,30 @@ test("mapa exibe detalhes e aplica filtro municipal", async ({page,dashboardApi}
   await expect(page.getByRole("button",{name:"Limpar município selecionado"})).toBeVisible()
 })
 
+test("sair do mapa durante o enquadramento nao gera erro Leaflet", async ({page,dashboardApi}) => {
+  const pageErrors:string[]=[]
+  page.on("pageerror",error=>pageErrors.push(error.message))
+  dashboardApi.respond=async (route,params) => {
+    const data=dashboardFixture(params)
+    data.cities.items=[
+      {nome:"NORTE TESTE",total:7,pct:35,lat:-15.5,lon:-58.2},
+      {nome:"CENTRO TESTE",total:8,pct:40,lat:-20.4,lon:-54.6},
+      {nome:"SUL TESTE",total:5,pct:25,lat:-24.8,lon:-51.1},
+    ]
+    await route.fulfill({json:data})
+  }
+
+  await openDashboard(page)
+  await page.getByRole("button",{name:"Território",exact:true}).click()
+  await expect(page.locator(".leaflet-interactive")).toHaveCount(3)
+  await page.locator(".leaflet-interactive").first().click()
+  await expect(page.getByRole("button",{name:"Limpar município selecionado"})).toBeVisible()
+  await page.getByRole("button",{name:"SLA",exact:true}).click()
+  await expect(page.getByRole("heading",{name:"SLA",exact:true})).toBeVisible()
+  await page.waitForTimeout(700)
+  expect(pageErrors).toEqual([])
+})
+
 test("textos operacionais essenciais mantem tamanho legivel", async ({page}) => {
   await openDashboard(page)
   for(const selector of [".filters select",".kpiMeta",".panel>header b"]){

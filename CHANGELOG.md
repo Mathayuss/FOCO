@@ -143,6 +143,14 @@
 - Primeiro bloco de resultados antecipado em cerca de 130 px no desktop de referência.
 - Suíte frontend ampliada para 135 testes aprovados em desktop, notebook e celular; build e tipagem aprovados.
 
+### Ciclo de vida confiável do mapa - FOCO-074 - 2026-10-10
+
+- Removida a animação de reenquadramento que podia continuar após a saída da tela de Território.
+- Seleção municipal e ajuste aos limites passam a usar posicionamento imediato e determinístico.
+- Navegação rápida do mapa para outro módulo não gera mais erro interno `_leaflet_pos`.
+- Regressão cobre seleção, reenquadramento e desmontagem em desktop, notebook e celular.
+- Suíte frontend ampliada para 138 testes aprovados; build e tipagem aprovados.
+
 ### Testes frontend - FOCO-041
 
 - Suite Playwright integrada ao repositorio e ao workflow de CI existente.

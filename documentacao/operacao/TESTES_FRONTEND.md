@@ -91,6 +91,8 @@ A integracao dos indicadores continua coberta pela suite backend isolada.
   filtros ativos continuam acessiveis na barra fixa e removiveis individualmente.
 - Visao Geral aparece na mesma barra do status da API e do usuario, sem manter
   um segundo cabecalho no conteudo.
+- Saida rapida do mapa durante o reenquadramento nao deixa animacao pendente
+  nem gera erro interno do Leaflet apos a desmontagem.
 
 Para repetir os casos de temporizacao:
 
@@ -255,6 +257,15 @@ antecipa o primeiro comparativo em cerca de 130 px no desktop de referencia.
 Suite final: 135 testes aprovados, 0 falhos, em 1920x1080, 1366x768 e 390x844;
 tipagem e build TypeScript/Vite aprovados. Backend e banco nao foram alterados.
 Consulte [Validacao FOCO-072](VALIDACAO_FOCO_072.md).
+
+## Validacao local - FOCO-074 - 2026-10-10
+
+O smoke operacional detectou uma falha intermitente `_leaflet_pos` ao navegar
+rapidamente para fora do mapa. O reenquadramento foi tornado imediato e um teste
+passou a interromper o mapa apos selecionar um municipio. Suite final: 138 testes
+aprovados, 0 falhos, nos tres viewports; tipagem e build aprovados. Backend e
+banco nao foram alterados.
+Consulte [Validacao FOCO-074](VALIDACAO_FOCO_074.md).
 
 ## Referencias
 

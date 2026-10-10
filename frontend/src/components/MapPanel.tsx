@@ -14,13 +14,11 @@ function MapViewport({cities,selected}:{cities:NamedMetric[];selected:string}){
  useEffect(()=>{
   const selectedCity=cities.find(city=>city.nome===selected)
   if(selectedCity){
-   map.flyTo([selectedCity.lat!,selectedCity.lon!],9,{duration:.45})
-   return
-  }
-  if(cities.length===1){
-   map.setView([cities[0].lat!,cities[0].lon!],8)
+   map.setView([selectedCity.lat!,selectedCity.lon!],9,{animate:false})
+  }else if(cities.length===1){
+   map.setView([cities[0].lat!,cities[0].lon!],8,{animate:false})
   }else if(cities.length>1){
-   map.fitBounds(cities.map(city=>[city.lat!,city.lon!] as [number,number]),{padding:[28,28],maxZoom:8})
+   map.fitBounds(cities.map(city=>[city.lat!,city.lon!] as [number,number]),{padding:[28,28],maxZoom:8,animate:false})
   }
  },[cities,map,selected])
  return null

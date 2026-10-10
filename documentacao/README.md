@@ -53,6 +53,7 @@ Esta pasta `documentacao/` concentra a documentação técnica, normativa e oper
 - [Acessibilidade do fluxo de importacao - FOCO-068](operacao/VALIDACAO_FOCO_068.md)
 - [Filtros comparativos e mapa interativo - FOCO-070](operacao/VALIDACAO_FOCO_070.md)
 - [Interface operacional compacta - FOCO-072](operacao/VALIDACAO_FOCO_072.md)
+- [Ciclo de vida confiavel do mapa - FOCO-074](operacao/VALIDACAO_FOCO_074.md)
 
 ## Observação Sobre Arquivos Importados
 
