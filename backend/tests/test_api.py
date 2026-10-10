@@ -1061,7 +1061,8 @@ def test_sejusp_analytics_uses_registration_date_year_instead_of_filename():
         _cleanup_imported_test_data([source_id], [unit_name])
 
 
-def test_sejusp_compares_selected_period_with_previous_period():
+def test_sejusp_compares_selected_period_with_same_period_from_previous_year():
+    previous_year_id = f"COMPARACAO-FEV-ANTERIOR-{uuid4()}"
     january_id = f"COMPARACAO-JAN-{uuid4()}"
     february_id = f"COMPARACAO-FEV-{uuid4()}"
     unit_name = f"UNIDADE COMPARACAO {uuid4()}"
@@ -1070,6 +1071,7 @@ def test_sejusp_compares_selected_period_with_previous_period():
     batch_id = None
     content = (
         "Nº/ANO,DATA DO REGISTRO,HORA DO REGISTRO,DATA DO FATO,HORA DO FATO,FATO,UNIDADE DE ORIGEM,MUNICÍPIO\n"
+        f"{previous_year_id},15/02/2024,10:00,15/02/2024,10:00,{type_name},{unit_name},{municipality}\n"
         f"{january_id},15/01/2025,10:00,15/01/2025,10:00,{type_name},{unit_name},{municipality}\n"
         f"{february_id},15/02/2025,10:00,15/02/2025,10:00,{type_name},{unit_name},{municipality}\n"
     ).encode("utf-8")
@@ -1091,10 +1093,10 @@ def test_sejusp_compares_selected_period_with_previous_period():
             monthly = client.get("/api/v1/analytics/monthly", params=params).json()
 
         comparison = overview["comparison"]
-        assert commit["inserted_rows"] == 2
+        assert commit["inserted_rows"] == 3
         assert comparison["available"] is True
         assert comparison["current_label"] == "Fev/2025"
-        assert comparison["baseline_label"] == "Jan/2025"
+        assert comparison["baseline_label"] == "Fev/2024"
         assert comparison["current_total"] == 1
         assert comparison["baseline_total"] == 1
         assert comparison["delta_abs"] == 0
@@ -1102,14 +1104,14 @@ def test_sejusp_compares_selected_period_with_previous_period():
         assert overview["delta_pct"] == 0
         assert monthly["comparison"] == [{
             "current_month": "Fev/2025",
-            "baseline_month": "Jan/2025",
+            "baseline_month": "Fev/2024",
             "current": 1,
             "baseline": 1,
             "delta": 0,
         }]
     finally:
         _cleanup_imported_test_data(
-            [january_id, february_id],
+            [previous_year_id, january_id, february_id],
             [unit_name],
             [batch_id] if batch_id else [],
         )

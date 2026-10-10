@@ -79,8 +79,18 @@ A integracao dos indicadores continua coberta pela suite backend isolada.
   rolagem e permanece dentro da viewport em desktop, notebook e celular.
 - Apos a previa, o dialogo permite confirmar a importacao e informa sucesso,
   duplicidade ou erro sem perder o contexto do arquivo analisado.
+- O seletor de arquivo aceita teclado; o dialogo contem o foco, bloqueia `Esc`
+  durante o processamento e permite fechamento seguro nos estados finais.
 - Comparacao anual identifica o recorte de meses equivalentes quando os anos
   possuem coberturas diferentes, sem substituir o total anual completo.
+- Mes, trimestre, ano e intervalo personalizado usam o mesmo periodo do ano
+  anterior, com os dois recortes apresentados na interface.
+- Mapa permite inspecionar, selecionar e limpar municipio; tooltip, ajuste de
+  enquadramento e legibilidade sao verificados nos tres viewports.
+- Area superior compacta nao repete fonte, filtros, versao ou contexto; os
+  filtros ativos continuam acessiveis na barra fixa e removiveis individualmente.
+- Visao Geral aparece na mesma barra do status da API e do usuario, sem manter
+  um segundo cabecalho no conteudo.
 
 Para repetir os casos de temporizacao:
 
@@ -214,6 +224,37 @@ duplicidade total e erro da API foram cobertos em 1920x1080, 1366x768 e
 TypeScript/Vite aprovados. Backend e banco nao foram alterados nem reexecutados
 neste incremento. CI remoto e cobertura percentual nao foram verificados.
 Consulte [Validacao FOCO-066](VALIDACAO_FOCO_066.md).
+
+## Validacao local - FOCO-068 - 2026-10-09
+
+O fluxo de importacao foi exercitado somente por teclado desde a selecao do
+arquivo ate o dialogo de confirmacao. O foco permaneceu contido no modal, `Esc`
+nao interrompeu a analise e fechou o estado pronto. Suite frontend final: 120
+testes aprovados, 0 falhos, nos tres viewports; tipagem e build TypeScript/Vite
+aprovados. Backend e banco nao foram alterados nem reexecutados. CI remoto e
+cobertura percentual nao foram verificados.
+Consulte [Validacao FOCO-068](VALIDACAO_FOCO_068.md).
+
+## Validacao local - FOCO-070 - 2026-10-09
+
+Regressoes demonstraram que mes e trimestre ainda usavam o periodo imediatamente
+anterior e que intervalos de datas nao eram aceitos. A regra foi unificada para
+o mesmo recorte do ano anterior. Suite final: 132 testes frontend aprovados,
+0 falhos, em 1920x1080, 1366x768 e 390x844; tipagem e build TypeScript/Vite
+aprovados. O backend aprovou 97 testes em SQLite e 97 em PostgreSQL/PostGIS.
+A aplicacao operacional foi conferida em `2026 x 2025` e por intervalo exato.
+CI remoto e cobertura percentual nao foram verificados.
+Consulte [Validacao FOCO-070](VALIDACAO_FOCO_070.md).
+
+## Validacao local - FOCO-072 - 2026-10-10
+
+As capturas de apoio demonstraram excesso de altura e repeticao antes dos dados.
+Testes reproduziram a presenca do resumo duplicado, chips locais, faixa da fonte,
+breadcrumb e selo de versao. A versao final reduziu a barra fixa para 54 px e
+antecipa o primeiro comparativo em cerca de 130 px no desktop de referencia.
+Suite final: 135 testes aprovados, 0 falhos, em 1920x1080, 1366x768 e 390x844;
+tipagem e build TypeScript/Vite aprovados. Backend e banco nao foram alterados.
+Consulte [Validacao FOCO-072](VALIDACAO_FOCO_072.md).
 
 ## Referencias
 

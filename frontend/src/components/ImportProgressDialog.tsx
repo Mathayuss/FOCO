@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, type KeyboardEvent } from "react"
 import type { CsvPreview, ImportCommit } from "../types"
 
 export type ImportProgressState = {
@@ -75,6 +75,7 @@ function ProcessingContent({state}:{state:ImportProgressState}){
 
 export default function ImportProgressDialog({file,progress,preview,result,error,dashboardReady,onCommit,onClose,onOpenDashboard}:ImportProgressDialogProps){
   const dialogRef=useRef<HTMLElement>(null)
+  const previousFocusRef=useRef<HTMLElement|null>(null)
   const previewDuplicate=Boolean(preview?.can_commit && preview.new_rows === 0 && preview.existing_rows > 0)
   const resultDuplicate=Boolean(result && result.inserted_rows === 0 && result.skipped_duplicate_rows > 0)
   let tone:DialogTone="processing"
@@ -107,13 +108,41 @@ export default function ImportProgressDialog({file,progress,preview,result,error
 
   useEffect(()=>{
     const previousOverflow=document.body.style.overflow
+    previousFocusRef.current=document.activeElement instanceof HTMLElement ? document.activeElement : null
     document.body.style.overflow="hidden"
     dialogRef.current?.focus()
-    return ()=>{ document.body.style.overflow=previousOverflow }
+    return ()=>{
+      document.body.style.overflow=previousOverflow
+      previousFocusRef.current?.focus()
+    }
   },[])
 
+  function handleKeyDown(event:KeyboardEvent<HTMLElement>){
+    if(event.key === "Escape" && !progress){
+      event.preventDefault()
+      onClose()
+      return
+    }
+    if(event.key !== "Tab") return
+
+    const buttons=Array.from(dialogRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? [])
+    if(!buttons.length){
+      event.preventDefault()
+      dialogRef.current?.focus()
+      return
+    }
+    const activeIndex=buttons.indexOf(document.activeElement as HTMLButtonElement)
+    if(event.shiftKey && activeIndex <= 0){
+      event.preventDefault()
+      buttons[buttons.length-1].focus()
+    }else if(!event.shiftKey && (activeIndex === -1 || activeIndex === buttons.length-1)){
+      event.preventDefault()
+      buttons[0].focus()
+    }
+  }
+
   return <div className="importProgressOverlay">
-    <section ref={dialogRef} className={`importProgressDialog ${tone}`} role="dialog" aria-modal="true" aria-labelledby="import-progress-title" aria-describedby="import-progress-description" tabIndex={-1}>
+    <section ref={dialogRef} className={`importProgressDialog ${tone}`} role="dialog" aria-modal="true" aria-busy={Boolean(progress)} aria-labelledby="import-progress-title" aria-describedby="import-progress-description" tabIndex={-1} onKeyDown={handleKeyDown}>
       <header>
         <span>IMPORTAÇÃO DE DADOS</span>
         <b><i aria-hidden="true"/> {headerStatus}</b>

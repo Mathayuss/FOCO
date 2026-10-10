@@ -105,7 +105,11 @@ export default function Imports({setGlobalFilters,onShowDashboard}:ImportsProps)
   <div className="pageHead"><div><div className="eyebrow">DADOS / IMPORTAÇÕES</div><h1>Importações</h1><p>Pré-validação de arquivos CSV/XLS/XLSX antes de consolidar ocorrências operacionais.</p></div><span className={`badge ${preview?.can_commit && !preview.already_imported && preview.new_rows>0?"ok":"warn"}`}>{status}</span></div>
   <div className="importGrid">
    <section className="uploadPanel">
-    <label className={`dropZone ${loading?"loading":""}`}>
+    <label className={`dropZone ${loading?"loading":""}`} role="button" tabIndex={0} aria-label="Selecionar arquivo de ocorrências" onKeyDown={event=>{
+     if(event.key!=="Enter" && event.key!==" ") return
+     event.preventDefault()
+     event.currentTarget.querySelector<HTMLInputElement>('input[type="file"]')?.click()
+    }}>
      <input type="file" accept=".csv,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={e=>handleFile(e.target.files?.[0]||null)}/>
      <span className="dropIcon">ARQ</span>
      <b>{file?.name || "Selecionar CSV/XLS/XLSX de ocorrências"}</b>

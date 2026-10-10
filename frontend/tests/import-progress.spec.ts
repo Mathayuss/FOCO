@@ -46,6 +46,12 @@ const commit = {
   can_commit:true,
 }
 
+const importFile = {
+  name:"ocorrencias-2026.csv",
+  mimeType:"text/csv",
+  buffer:Buffer.from("Nº/ANO;DATA DO REGISTRO;FATO;MUNICÍPIO\n1/2026;01/10/2026;INCÊNDIO;Campo Grande\n"),
+}
+
 async function openImports(page:import("@playwright/test").Page){
   await page.route("**/api/v1/imports/lotes*", route => route.fulfill({json:{items:[],total:0,limite:8,deslocamento:0}}))
   await page.goto("/")
@@ -55,11 +61,7 @@ async function openImports(page:import("@playwright/test").Page){
 }
 
 async function selectImportFile(page:import("@playwright/test").Page){
-  await page.locator('input[type="file"]').setInputFiles({
-    name:"ocorrencias-2026.csv",
-    mimeType:"text/csv",
-    buffer:Buffer.from("Nº/ANO;DATA DO REGISTRO;FATO;MUNICÍPIO\n1/2026;01/10/2026;INCÊNDIO;Campo Grande\n"),
-  })
+  await page.locator('input[type="file"]').setInputFiles(importFile)
 }
 
 test("mostra analise do arquivo enquanto a previa esta pendente", async ({page}) => {
@@ -82,6 +84,8 @@ test("mostra analise do arquivo enquanto a previa esta pendente", async ({page})
     await expect(dialog.getByRole("progressbar")).toBeVisible()
     await expect(page.getByRole("button",{name:"Importar linhas válidas"})).toBeDisabled()
     await expect.poll(()=>page.evaluate(()=>document.body.style.overflow)).toBe("hidden")
+    await page.keyboard.press("Escape")
+    await expect(dialog).toBeVisible()
     const box=await dialog.boundingBox()
     const viewport=page.viewportSize()
     expect(box).not.toBeNull()
@@ -97,7 +101,11 @@ test("mostra analise do arquivo enquanto a previa esta pendente", async ({page})
     await expect(dialog).toContainText("1 linha nova")
     await expect(page.getByText("Pronto para importar",{exact:true})).toBeVisible()
     await expect(page.locator(".metricRow.good").filter({hasText:"Válidas"})).toContainText("1 · 100%")
-    await dialog.getByRole("button",{name:"Fechar"}).click()
+    await page.keyboard.press("Shift+Tab")
+    await expect(dialog.getByRole("button",{name:"Importar agora"})).toBeFocused()
+    await page.keyboard.press("Tab")
+    await expect(dialog.getByRole("button",{name:"Fechar"})).toBeFocused()
+    await page.keyboard.press("Escape")
     await expect(dialog).toBeHidden()
     await expect.poll(()=>page.evaluate(()=>document.body.style.overflow)).toBe("")
   }finally{ release() }
@@ -163,4 +171,19 @@ test("mostra erro da API dentro do modal", async ({page}) => {
   await expect(dialog.getByRole("heading")).toHaveText("Falha na análise")
   await expect(dialog).toContainText("Cabeçalhos obrigatórios ausentes: municipio")
   await expect(dialog.getByRole("button",{name:"Fechar"})).toBeVisible()
+})
+
+test("permite selecionar a planilha usando somente o teclado", async ({page}) => {
+  await page.route("**/api/v1/imports/preview", route => route.fulfill({json:preview}))
+  await openImports(page)
+
+  const selector = page.getByRole("button",{name:"Selecionar arquivo de ocorrências"})
+  await selector.focus()
+  await expect(selector).toBeFocused()
+  const chooserPromise = page.waitForEvent("filechooser")
+  await page.keyboard.press("Enter")
+  const chooser = await chooserPromise
+  await chooser.setFiles(importFile)
+
+  await expect(page.getByRole("dialog").getByRole("heading")).toHaveText("Arquivo pronto para importar")
 })

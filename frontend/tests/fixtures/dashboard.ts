@@ -12,13 +12,29 @@ export const turnoTeste = "Tarde"
 const periods = [
   {key:"all", label:"Jan-Fev/2025", months:["Jan/2025","Fev/2025"]},
   {key:"ano-2025", label:"2025", months:["Jan/2025","Fev/2025"]},
+  {key:"ano-2026", label:"2026", months:["Jan/2026","Fev/2026"]},
   {key:"2025-01", label:"Jan/2025", months:["Jan/2025"]},
   {key:periodoTeste, label:"Fev/2025", months:["Fev/2025"]},
 ]
 const dimensions = ["period","type","municipality","unit","subtype","shift"]
 
+function customPeriod(value:string|null){
+  const match=value?.match(/^faixa-(\d{4})-(\d{2})-(\d{2})--(\d{4})-(\d{2})-(\d{2})$/)
+  if(!match) return null
+  const [,startYear,startMonth,startDay,endYear,endMonth,endDay]=match
+  return {
+    key:value!,
+    label:`${startDay}/${startMonth}/${startYear} a ${endDay}/${endMonth}/${endYear}`,
+    months:[`Jan/${startYear}`,`Fev/${endYear}`],
+  }
+}
+
+function previousYearLabel(label:string){
+  return label.replace(/\b(\d{4})\b/g,year=>String(Number(year)-1))
+}
+
 export function dashboardFixture(params = new URLSearchParams(), total?:number): DashboardResponse {
-  const period = periods.find(option => option.key === params.get("period")) || periods[0]
+  const period = periods.find(option => option.key === params.get("period")) || customPeriod(params.get("period")) || periods[0]
   const filtered = dimensions.some(key => params.get(key) && params.get(key) !== "all")
   const count = total ?? (filtered ? 4 : 12)
   const metadata:FilterMetadata = {
@@ -38,7 +54,8 @@ export function dashboardFixture(params = new URLSearchParams(), total?:number):
   const metrics = (items:NamedMetric[]) => ({...metadata,source_scope:"sejusp_importado",items})
   const type = params.get("type") || tipoTeste
   const hours = Array.from({length:24},(_,hour) => hour === 14 ? count : 0)
-  const comparison = period.key === periodoTeste
+  const comparison = period.key !== "all"
+  const baselineLabel = comparison ? previousYearLabel(period.label) : null
   return {
     filters: {
       periods, types:[tipoTeste,tipoLongoTeste], municipalities:[municipioTeste],
@@ -50,7 +67,7 @@ export function dashboardFixture(params = new URLSearchParams(), total?:number):
       ...metadata, total:count, average_per_day:2, delta_pct:comparison ? 100 : null,
       comparison: {
         available:comparison, current_label:period.label,
-        baseline_label:comparison ? "Jan/2025" : null, current_total:count,
+        baseline_label:baselineLabel, current_total:count,
         baseline_total:comparison ? count / 2 : null,
         delta_abs:comparison ? count / 2 : null, delta_pct:comparison ? 100 : null,
         reason:comparison ? null : "Fixture de teste sem base anterior.",source_scope:"sejusp_importado",
@@ -64,8 +81,8 @@ export function dashboardFixture(params = new URLSearchParams(), total?:number):
     monthly: {
       ...metadata, source_scope:"sejusp_importado",
       items:period.months.map(mes => ({mes,total:count / period.months.length,tip:[]})),
-      comparison:comparison ? [{current_month:"Fev/2025",baseline_month:"Jan/2025",
-        current:count,baseline:count / 2,delta:count / 2}] : [],
+      comparison:comparison ? period.months.map(mes=>({current_month:mes,baseline_month:previousYearLabel(mes),
+        current:count/period.months.length,baseline:count/(period.months.length*2),delta:count/(period.months.length*2)})) : [],
     },
     types:metrics([{nome:type,total:count,pct:100}]),
     cities:metrics([{nome:municipioTeste,total:count,pct:100,lat:-20.45,lon:-54.61}]),

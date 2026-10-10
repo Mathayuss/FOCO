@@ -66,7 +66,25 @@ const importedQuarterLabels: Record<string, string> = {
   q4: "Out-Dez",
 }
 
+const customPeriodPattern = /^faixa-(\d{4}-\d{2}-\d{2})--(\d{4}-\d{2}-\d{2})$/
+
+function formatDate(value:string){
+  const [year,month,day]=value.split("-")
+  return `${day}/${month}/${year}`
+}
+
+export function parseCustomPeriod(period:string){
+  const match=period.match(customPeriodPattern)
+  return match ? {start:match[1],end:match[2]} : null
+}
+
+export function customPeriodKey(start:string,end:string){
+  return `faixa-${start}--${end}`
+}
+
 function importedDynamicPeriodLabel(period: string) {
+  const custom=parseCustomPeriod(period)
+  if(custom) return `${formatDate(custom.start)} a ${formatDate(custom.end)}`
   const yearOnly = period.match(/^ano-(\d{4})$/)
   if (yearOnly) return yearOnly[1]
   const month = period.match(/^(\d{4})-(0[1-9]|1[0-2])$/)

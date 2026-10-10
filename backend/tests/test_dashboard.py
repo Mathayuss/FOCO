@@ -94,11 +94,11 @@ def test_dashboard_empty_slice_has_no_top_demand(ocorrencias_dashboard):
 
 def test_dashboard_zero_baseline_has_no_percentage():
     with SessionLocal() as db:
-        for month, type_name in [(1, "OUTRO"), (2, "OUTRO"), (3, "ALVO")]:
+        for year, month, type_name in [(2024, 2, "OUTRO"), (2025, 1, "OUTRO"), (2025, 2, "OUTRO"), (2025, 3, "ALVO")]:
             db.add(Occurrence(
                 source=analytics.SOURCE_SCOPE,
-                source_id=f"COMPARACAO-ZERO-{month}",
-                opened_at=datetime(2025, month, 10, 9, tzinfo=ZoneInfo("America/Campo_Grande")),
+                source_id=f"COMPARACAO-ZERO-{year}-{month}",
+                opened_at=datetime(year, month, 10, 9, tzinfo=ZoneInfo("America/Campo_Grande")),
                 type_name=type_name,
                 municipality="MUNICIPIO TESTE",
             ))
@@ -118,7 +118,7 @@ def test_dashboard_zero_baseline_has_no_percentage():
         assert dashboard["overview"]["delta_pct"] is None
         assert comparison["reason"] == "A base anterior não possui ocorrências para calcular a variação percentual."
         assert dashboard["monthly"]["comparison"] == [{
-            "current_month": "Fev/2025", "baseline_month": "Jan/2025",
+            "current_month": "Fev/2025", "baseline_month": "Fev/2024",
             "current": 0, "baseline": 0, "delta": 0,
         }]
 
@@ -167,10 +167,84 @@ def test_dashboard_compares_year_with_equivalent_months_from_previous_year():
     }
 
 
+def test_dashboard_compares_month_with_same_month_from_previous_year():
+    with SessionLocal() as db:
+        for year, month, total in [(2025, 2, 1), (2026, 1, 7), (2026, 2, 3)]:
+            for sequence in range(total):
+                db.add(Occurrence(
+                    source=analytics.SOURCE_SCOPE,
+                    source_id=f"COMPARACAO-MENSAL-{year}-{month}-{sequence}",
+                    opened_at=datetime(year, month, 10, 9, tzinfo=ZoneInfo("America/Campo_Grande")),
+                    registered_at=datetime(year, month, 10, 9, tzinfo=ZoneInfo("America/Campo_Grande")),
+                    type_name="TIPO TESTE",
+                    municipality="MUNICIPIO TESTE",
+                ))
+        db.commit()
+
+    with TestClient(app) as client:
+        response = client.get("/api/v1/analytics/dashboard", params={"period": "2026-02"})
+
+    assert response.status_code == 200
+    comparison = response.json()["overview"]["comparison"]
+    assert comparison["current_label"] == "Fev/2026"
+    assert comparison["baseline_label"] == "Fev/2025"
+    assert comparison["current_total"] == 3
+    assert comparison["baseline_total"] == 1
+    assert comparison["delta_abs"] == 2
+    assert comparison["delta_pct"] == 200.0
+
+
+def test_dashboard_compares_custom_date_range_with_same_dates_from_previous_year():
+    dates = [
+        (datetime(2025, 1, 10, 9, tzinfo=ZoneInfo("America/Campo_Grande")), 1),
+        (datetime(2025, 1, 20, 9, tzinfo=ZoneInfo("America/Campo_Grande")), 1),
+        (datetime(2025, 2, 5, 9, tzinfo=ZoneInfo("America/Campo_Grande")), 1),
+        (datetime(2025, 2, 20, 9, tzinfo=ZoneInfo("America/Campo_Grande")), 1),
+        (datetime(2026, 1, 10, 9, tzinfo=ZoneInfo("America/Campo_Grande")), 1),
+        (datetime(2026, 1, 20, 9, tzinfo=ZoneInfo("America/Campo_Grande")), 2),
+        (datetime(2026, 2, 5, 9, tzinfo=ZoneInfo("America/Campo_Grande")), 1),
+        (datetime(2026, 2, 20, 9, tzinfo=ZoneInfo("America/Campo_Grande")), 1),
+    ]
+    with SessionLocal() as db:
+        for date_value, total in dates:
+            for sequence in range(total):
+                db.add(Occurrence(
+                    source=analytics.SOURCE_SCOPE,
+                    source_id=f"COMPARACAO-FAIXA-{date_value.date()}-{sequence}",
+                    opened_at=date_value,
+                    registered_at=date_value,
+                    type_name="TIPO TESTE",
+                    municipality="MUNICIPIO TESTE",
+                ))
+        db.commit()
+
+    period = "faixa-2026-01-15--2026-02-10"
+    with TestClient(app) as client:
+        response = client.get("/api/v1/analytics/dashboard", params={"period": period})
+
+    assert response.status_code == 200
+    dashboard = response.json()
+    comparison = dashboard["overview"]["comparison"]
+    assert dashboard["overview"]["total"] == 3
+    assert dashboard["overview"]["applied_filters"]["period"] == "15/01/2026 a 10/02/2026"
+    assert comparison["available"] is True
+    assert comparison["current_label"] == "15/01/2026 a 10/02/2026"
+    assert comparison["baseline_label"] == "15/01/2025 a 10/02/2025"
+    assert comparison["current_total"] == 3
+    assert comparison["baseline_total"] == 2
+    assert comparison["delta_abs"] == 1
+    assert comparison["delta_pct"] == 50.0
+    assert dashboard["monthly"]["comparison"] == [
+        {"current_month": "Jan/2026", "baseline_month": "Jan/2025", "current": 2, "baseline": 1, "delta": 1},
+        {"current_month": "Fev/2026", "baseline_month": "Fev/2025", "current": 1, "baseline": 1, "delta": 0},
+    ]
+
+
 @pytest.mark.parametrize("params,field", [
     ({"source": "demo"}, "source"),
     ({"fonte": "invalida"}, "source"),
     ({"period": "ano-1900"}, "period"),
+    ({"period": "faixa-2026-03-10--2026-03-01"}, "period"),
 ])
 def test_dashboard_rejects_invalid_filters(params, field):
     with TestClient(app) as client:

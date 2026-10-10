@@ -109,6 +109,40 @@
 - Estados de processamento não permitem fechar ou repetir a ação enquanto a requisição está ativa.
 - Fluxo validado em desktop, notebook e celular; suíte frontend ampliada para 117 testes aprovados.
 
+### Acessibilidade do fluxo de importação - FOCO-068 - 2026-10-09
+
+- A área de seleção de planilha pode ser acionada por teclado com Enter ou Espaço.
+- O seletor exibe foco visível e possui nome acessível específico.
+- O foco permanece contido no diálogo enquanto ele está aberto.
+- `Esc` fecha estados concluídos ou de erro, mas não interrompe processamento ativo.
+- Ao fechar, o foco retorna ao elemento que iniciou o fluxo.
+- Suíte frontend ampliada para 120 testes aprovados em desktop, notebook e celular.
+
+### Filtros comparativos e mapa interativo - FOCO-070 - 2026-10-09
+
+- Meses, trimestres, anos e intervalos personalizados são comparados com o mesmo recorte do ano anterior.
+- O filtro aceita datas inicial e final e mantém o intervalo ativo ao navegar entre os painéis analíticos.
+- Comparações anuais continuam limitadas aos meses com cobertura equivalente, sem alterar o total completo do ano selecionado.
+- Rótulos de comparação exibem explicitamente os dois períodos utilizados no cálculo.
+- Mapa territorial ajusta o enquadramento aos municípios disponíveis, exibe tooltip e permite aplicar ou limpar o filtro pelo marcador.
+- Tipografia de filtros, indicadores, tabelas, navegação e painéis foi ampliada sem reduzir a densidade operacional.
+- Base operacional validada em `2026 x 2025` e em `15/01/2026-10/02/2026 x 15/01/2025-10/02/2025`.
+- Suítes finais: 97 testes backend em SQLite, 97 em PostgreSQL/PostGIS e 132 testes frontend nos três viewports.
+
+### Interface operacional compacta - FOCO-072 - 2026-10-10
+
+- Área superior da Visão Geral reorganizada a partir das capturas em `documentacao/imagens de apoio`.
+- Barra fixa reduzida para 54 px e mantida somente para filtros ativos, saúde da API e ações globais.
+- Título e descrição da Visão Geral movidos para a barra superior, eliminando o cabeçalho separado.
+- Removidos resumo duplicado de filtros, breadcrumb decorativo, selo de versão, chips repetidos e faixa explicativa da fonte.
+- Seletor de fonte de opção única removido; `SEJUSP importado` permanece identificado uma vez no painel de filtros.
+- Filtros secundários usam duas colunas no celular, reduzindo a rolagem antes dos resultados.
+- No celular, a barra mostra o título e oculta chips comprimidos; os valores ativos permanecem nos próprios controles.
+- Cartões de variação e cobertura SLA removidos da Visão Geral: a variação já existe no comparativo e SLA pertence ao módulo próprio da v0.7.
+- Ocorrências, média diária e maior demanda permanecem como indicadores principais da v0.3.
+- Primeiro bloco de resultados antecipado em cerca de 130 px no desktop de referência.
+- Suíte frontend ampliada para 135 testes aprovados em desktop, notebook e celular; build e tipagem aprovados.
+
 ### Testes frontend - FOCO-041
 
 - Suite Playwright integrada ao repositorio e ao workflow de CI existente.

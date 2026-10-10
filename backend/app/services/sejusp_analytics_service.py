@@ -2,7 +2,8 @@ from collections import Counter, defaultdict
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
+import re
 from threading import Lock
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -57,6 +58,7 @@ SHIFT_RANGES = {
     "Tarde": range(12, 18),
     "Noite": range(18, 24),
 }
+CUSTOM_PERIOD_PATTERN = re.compile(r"^faixa-(\d{4}-\d{2}-\d{2})--(\d{4}-\d{2}-\d{2})$")
 
 
 @dataclass(frozen=True)
@@ -276,6 +278,51 @@ def _range_label(pairs: list[tuple[int, int]]) -> str:
     return f"{_month_label(first_year, first_month)}-{_month_label(last_year, last_month)}"
 
 
+def _date_range_label(start: date, end: date) -> str:
+    return f"{start.strftime('%d/%m/%Y')} a {end.strftime('%d/%m/%Y')}"
+
+
+def _month_pairs_between(start: date, end: date) -> list[tuple[int, int]]:
+    pairs = []
+    year, month = start.year, start.month
+    while (year, month) <= (end.year, end.month):
+        pairs.append((year, month))
+        if month == 12:
+            year, month = year + 1, 1
+        else:
+            month += 1
+    return pairs
+
+
+def _previous_year_date(value: date) -> date:
+    try:
+        return value.replace(year=value.year - 1)
+    except ValueError:
+        return value.replace(year=value.year - 1, day=28)
+
+
+def _custom_period(period: str | None) -> dict[str, Any] | None:
+    match = CUSTOM_PERIOD_PATTERN.fullmatch(period or "")
+    if not match:
+        return None
+    try:
+        start = date.fromisoformat(match.group(1))
+        end = date.fromisoformat(match.group(2))
+    except ValueError:
+        return None
+    if start > end:
+        return None
+    pairs = _month_pairs_between(start, end)
+    return {
+        "label": _date_range_label(start, end),
+        "months": [_month_label(year, month) for year, month in pairs],
+        "period_keys": pairs,
+        "comparison_mode": "year_over_year_range",
+        "start_date": start,
+        "end_date": end,
+    }
+
+
 def _period_defs(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     dates = [row["reference_at"] for row in rows if row.get("reference_at")]
     pairs = sorted({(date.year, date.month) for date in dates})
@@ -307,12 +354,14 @@ def _period_defs(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
                     "label": _range_label(quarter_pairs),
                     "months": [_month_label(year, month) for month in present],
                     "period_keys": quarter_pairs,
+                    "comparison_mode": "year_over_year",
                 }
         for month in year_months:
             periods[f"{year}-{month:02d}"] = {
                 "label": _month_label(year, month),
                 "months": [_month_label(year, month)],
                 "period_keys": [(year, month)],
+                "comparison_mode": "year_over_year",
             }
     return periods
 
@@ -398,11 +447,12 @@ def validate_filter_params(
         "subtype": (subtype, _sorted_unique(row["subtype"] for row in rows)),
         "shift": (shift, list(SHIFT_RANGES)),
     }
-    return [
+    errors = [
         {"field": field, "value": value, "allowed": allowed}
         for field, (value, allowed) in checks.items()
-        if value and value not in allowed
+        if value and value not in allowed and not (field == "period" and _custom_period(value))
     ]
+    return errors
 
 
 def _sorted_unique(values: Any) -> list[str]:
@@ -414,6 +464,9 @@ def _period(
     period: str | None,
     definitions: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    custom = _custom_period(period)
+    if custom is not None:
+        return custom
     periods = _period_defs(rows) if definitions is None else definitions
     return periods.get(period or "all", periods["all"])
 
@@ -436,10 +489,17 @@ def _filtered_rows(
     *,
     period_definitions: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    selected_pairs = set(_period(rows, period, period_definitions)["period_keys"])
+    selected_period = _period(rows, period, period_definitions)
+    selected_pairs = set(selected_period["period_keys"])
+    start_date = selected_period.get("start_date")
+    end_date = selected_period.get("end_date")
     filtered = []
     for row in rows:
-        if selected_pairs and _row_period_pair(row) not in selected_pairs:
+        if start_date and end_date:
+            reference_at = row.get("reference_at")
+            if not reference_at or not start_date <= reference_at.date() <= end_date:
+                continue
+        elif selected_pairs and _row_period_pair(row) not in selected_pairs:
             continue
         if type_name and row["type"] != type_name:
             continue
@@ -631,6 +691,50 @@ def _comparison(
     totals = Counter(_row_period_pair(row) for row in comparable_rows)
     comparison_current_pairs = current_pairs
     coverage_note = None
+    if selected_period.get("comparison_mode") == "year_over_year_range":
+        current_start = selected_period["start_date"]
+        current_end = selected_period["end_date"]
+        baseline_start = _previous_year_date(current_start)
+        baseline_end = _previous_year_date(current_end)
+        baseline_pairs = _month_pairs_between(baseline_start, baseline_end)
+        if not set(baseline_pairs).issubset(available_pairs):
+            summary["reason"] = "Não há cobertura completa nas mesmas datas do ano anterior."
+            return summary, []
+        current_rows = [
+            row for row in comparable_rows
+            if row.get("reference_at") and current_start <= row["reference_at"].date() <= current_end
+        ]
+        baseline_rows = [
+            row for row in comparable_rows
+            if row.get("reference_at") and baseline_start <= row["reference_at"].date() <= baseline_end
+        ]
+        current_totals = Counter(_row_period_pair(row) for row in current_rows)
+        baseline_totals = Counter(_row_period_pair(row) for row in baseline_rows)
+        current_total = len(current_rows)
+        baseline_total = len(baseline_rows)
+        delta_abs = current_total - baseline_total
+        delta_pct = round(delta_abs / baseline_total * 100, 1) if baseline_total else None
+        summary.update({
+            "available": True,
+            "current_label": _date_range_label(current_start, current_end),
+            "baseline_label": _date_range_label(baseline_start, baseline_end),
+            "current_total": current_total,
+            "baseline_total": baseline_total,
+            "delta_abs": delta_abs,
+            "delta_pct": delta_pct,
+            "reason": None if baseline_total else "A base anterior não possui ocorrências para calcular a variação percentual.",
+        })
+        points = [
+            {
+                "current_month": _month_label(*current_pair),
+                "baseline_month": _month_label(*baseline_pair),
+                "current": current_totals[current_pair],
+                "baseline": baseline_totals[baseline_pair],
+                "delta": current_totals[current_pair] - baseline_totals[baseline_pair],
+            }
+            for current_pair, baseline_pair in zip(current_pairs, baseline_pairs)
+        ]
+        return summary, points
     if selected_period.get("comparison_mode") == "year_over_year":
         comparison_current_pairs, baseline_pairs = _equivalent_previous_year_period(
             current_pairs, available_pairs,
