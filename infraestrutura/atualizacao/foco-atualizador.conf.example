@@ -1,0 +1,21 @@
+# FOCO - Atualizador de Releases
+# Arquivo: /etc/foco-atualizador.conf
+
+DIRETORIO_FOCO="/opt/foco"
+DIRETORIO_BACKUP="/var/backups/foco"
+DIRETORIO_CACHE="/var/cache/foco-atualizador"
+ARQUIVO_LOG="/var/log/foco-atualizador.log"
+
+REPOSITORIO="Mathayuss/FOCO"
+API_RELEASE="https://api.github.com/repos/Mathayuss/FOCO/releases/latest"
+BASE_DOWNLOAD="https://github.com/Mathayuss/FOCO/releases/download"
+
+URL_HEALTH_API="http://127.0.0.1:8000/api/v1/health"
+URL_HEALTH_INTERFACE="http://127.0.0.1:5173/"
+TIMEOUT_HEALTH=120
+
+# Opcional para repositório privado ou maior limite da API:
+# GITHUB_TOKEN="github_pat_..."
+#
+# Não coloque token no repositório. Se usar, proteja este arquivo:
+# chmod 600 /etc/foco-atualizador.conf

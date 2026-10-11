@@ -2,6 +2,15 @@
 
 ## v0.3.1 - 2026-09-17
 
+### Releases reproduzíveis - FOCO-079 - 2026-10-10
+
+- Compose, Dockerfile e Nginx de produção passam a ser versionados separadamente do ambiente de desenvolvimento.
+- Pacotes de release usam API no mesmo domínio, banco sem porta pública e limite de importação de 512 MB em todas as camadas.
+- Gerador único cria o pacote, grava a versão e produz o SHA-256 sem incluir o arquivo `.env`.
+- Teste automatizado abre o pacote e valida configuração, checksum e ausência de segredos locais.
+- Workflow de release passa a executar testes de infraestrutura, tipagem e Playwright antes da publicação.
+- Atualizador usa `/opt/foco` por padrão e protege sua configuração com permissão `0600`.
+
 ### BI
 
 - Dashboard consolidado em `/api/v1/analytics/dashboard`, preservando os endpoints individuais.

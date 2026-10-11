@@ -1,0 +1,136 @@
+name: Publicar release FOCO
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  validar-servidor:
+    name: Validar servidor
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validar atualizador de releases
+        run: bash ../infraestrutura/atualizacao/testar-atualizador.sh
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Validar migrações
+        run: |
+          alembic upgrade head
+          alembic check
+
+      - name: Executar testes SQLite
+        run: pytest -q
+
+  validar-postgis:
+    name: Validar PostgreSQL/PostGIS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Executar testes no PostGIS descartável
+        run: |
+          docker compose -f compose.testes.yml up \
+            --build \
+            --abort-on-container-exit \
+            --exit-code-from testes
+        env:
+          COMPOSE_PROGRESS: plain
+
+      - name: Encerrar ambiente de testes
+        if: always()
+        run: docker compose -f compose.testes.yml down -v --remove-orphans
+
+  validar-interface:
+    name: Validar interface
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Habilitar pnpm
+        run: corepack enable
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Compilar
+        run: pnpm run build
+
+      - name: Validar tipos dos testes
+        run: pnpm run test:types
+
+      - name: Preparar Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Testar dashboards isolados
+        run: pnpm run test
+
+      - name: Preservar relatorio dos testes
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: testes-interface-release
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  publicar:
+    name: Gerar pacote e publicar release
+    needs:
+      - validar-servidor
+      - validar-postgis
+      - validar-interface
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preparar pacote
+        id: pacote
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          TAG="${GITHUB_REF_NAME}"
+          VERSAO="${TAG#v}"
+          ARQUIVO="FOCO-${TAG}.tar.gz"
+          TMP="$(mktemp -d)"
+
+          bash infraestrutura/scripts/preparar_release.sh "$VERSAO" "$TMP"
+
+          echo "arquivo=$TMP/$ARQUIVO" >> "$GITHUB_OUTPUT"
+          echo "sha=$TMP/${ARQUIVO}.sha256" >> "$GITHUB_OUTPUT"
+          echo "nome=$ARQUIVO" >> "$GITHUB_OUTPUT"
+
+      - name: Publicar GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --verify-tag \
+            --title "FOCO ${GITHUB_REF_NAME}" \
+            --generate-notes \
+            "${{ steps.pacote.outputs.arquivo }}" \
+            "${{ steps.pacote.outputs.sha }}"

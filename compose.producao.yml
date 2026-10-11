@@ -1,0 +1,61 @@
+services:
+  bd:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${BD_USUARIO:-foco}
+      POSTGRES_PASSWORD: ${BD_SENHA:?BD_SENHA obrigatoria no arquivo .env}
+      POSTGRES_DB: ${BD_NOME:-foco_ocorrencias}
+    expose:
+      - "5432"
+    volumes:
+      - dados_postgis:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${BD_USUARIO:-foco} -d ${BD_NOME:-foco_ocorrencias}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  servidor:
+    build: ./backend
+    restart: unless-stopped
+    env_file: [.env]
+    depends_on:
+      bd:
+        condition: service_healthy
+    expose:
+      - "8000"
+    ports:
+      - "127.0.0.1:8000:8000"
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  interface:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.producao
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api/v1}
+        VITE_LIMITE_IMPORTACAO_MB: ${VITE_LIMITE_IMPORTACAO_MB:-512}
+    restart: unless-stopped
+    depends_on:
+      servidor:
+        condition: service_healthy
+    ports:
+      - "${FOCO_PORTA_HTTP:-8080}:80"
+      - "127.0.0.1:5173:80"
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  dados_postgis:
