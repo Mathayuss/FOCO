@@ -17,10 +17,17 @@ MARCADOR = "SEGREDO_FICTICIO_APENAS_PARA_TESTES"
 def configuracao(ip="127.0.0.1"):
     return {"services": {
         "bd": {
-            "environment": {"POSTGRES_PASSWORD": MARCADOR},
+            "environment": {
+                "POSTGRES_USER": "foco",
+                "POSTGRES_PASSWORD": MARCADOR,
+                "POSTGRES_DB": "foco_ocorrencias",
+            },
             "ports": [{"host_ip": ip, "target": 5432, "published": "5432"}],
         },
-        "servidor": {"environment": {"LIMITE_IMPORTACAO_MB": "512"}},
+        "servidor": {"environment": {
+            "DATABASE_URL": f"postgresql+psycopg://foco:{MARCADOR}@bd:5432/foco_ocorrencias",
+            "LIMITE_IMPORTACAO_MB": "512",
+        }},
         "interface": {"environment": {"VITE_LIMITE_IMPORTACAO_MB": "512"}},
     }}
 
@@ -48,6 +55,31 @@ class TestConfiguracao(unittest.TestCase):
                 config["services"]["bd"]["environment"]["POSTGRES_PASSWORD"] = senha
                 self.assertTrue(verificador.validar_configuracao(config))
 
+    def test_recusa_senhas_padrao(self):
+        for senha in ["altere_esta_senha", "troque-esta-senha-antes-de-iniciar"]:
+            with self.subTest(senha=senha):
+                config = configuracao()
+                config["services"]["bd"]["environment"]["POSTGRES_PASSWORD"] = senha
+                config["services"]["servidor"]["environment"]["DATABASE_URL"] = (
+                    f"postgresql+psycopg://foco:{senha}@bd:5432/foco_ocorrencias"
+                )
+                self.assertTrue(verificador.validar_configuracao(config))
+
+    def test_recusa_database_url_ausente_invalida_ou_divergente(self):
+        for url in [
+            None,
+            "",
+            "invalida",
+            "postgresql+psycopg://foco:outra@bd:5432/foco_ocorrencias",
+            f"postgresql+psycopg://outro:{MARCADOR}@bd:5432/foco_ocorrencias",
+            f"postgresql+psycopg://foco:{MARCADOR}@externo:5432/foco_ocorrencias",
+            f"postgresql+psycopg://foco:{MARCADOR}@bd:5432/outro_banco",
+        ]:
+            with self.subTest(url=url):
+                config = configuracao()
+                config["services"]["servidor"]["environment"]["DATABASE_URL"] = url
+                self.assertTrue(verificador.validar_configuracao(config))
+
     def test_recusa_servico_ausente_e_formatos_invalidos(self):
         for config in [{}, {"services": []}, {"services": {"bd": []}}]:
             with self.subTest(config=config):
@@ -61,6 +93,21 @@ class TestConfiguracao(unittest.TestCase):
 class TestLimiteImportacao(unittest.TestCase):
     def test_aceita_limites_iguais_ate_512_mb(self):
         self.assertEqual(verificador.validar_limite_importacao(configuracao()), [])
+
+    def test_aceita_limite_da_interface_como_argumento_de_build(self):
+        config = configuracao()
+        config["services"]["interface"].pop("environment")
+        config["services"]["interface"]["build"] = {
+            "args": {"VITE_LIMITE_IMPORTACAO_MB": "512"}
+        }
+        self.assertEqual(verificador.validar_limite_importacao(config), [])
+
+    def test_recusa_limites_divergentes_dentro_da_interface(self):
+        config = configuracao()
+        config["services"]["interface"]["build"] = {
+            "args": {"VITE_LIMITE_IMPORTACAO_MB": "256"}
+        }
+        self.assertTrue(verificador.validar_limite_importacao(config))
 
     def test_recusa_limite_ausente_invalido_ou_nao_positivo(self):
         for servico, variavel in (

@@ -7,9 +7,14 @@ from pathlib import Path
 import subprocess
 import sys
 from typing import Any
+from urllib.parse import unquote, urlsplit
 
 RAIZ = Path(__file__).resolve().parents[2]
 LIMITE_MAXIMO_IMPORTACAO_MB = 512
+SENHAS_PADRAO = frozenset({
+    "altere_esta_senha",
+    "troque-esta-senha-antes-de-iniciar",
+})
 
 
 class ErroVerificacao(RuntimeError):
@@ -35,6 +40,31 @@ def validar_configuracao(configuracao: dict[str, Any]) -> list[str]:
     senha = ambiente.get("POSTGRES_PASSWORD") if isinstance(ambiente, dict) else None
     if not isinstance(senha, str) or not senha.strip():
         erros.append("Senha do banco ausente na configuracao resolvida.")
+    elif senha.strip().casefold() in SENHAS_PADRAO:
+        erros.append("Senha padrao do banco deve ser substituida.")
+
+    usuario = ambiente.get("POSTGRES_USER") if isinstance(ambiente, dict) else None
+    nome_banco = ambiente.get("POSTGRES_DB") if isinstance(ambiente, dict) else None
+    servidor = servicos.get("servidor") if isinstance(servicos, dict) else None
+    ambiente_servidor = servidor.get("environment") if isinstance(servidor, dict) else None
+    url = ambiente_servidor.get("DATABASE_URL") if isinstance(ambiente_servidor, dict) else None
+    url_coerente = False
+    if isinstance(url, str) and url:
+        try:
+            partes = urlsplit(url)
+            url_coerente = (
+                partes.scheme == "postgresql+psycopg"
+                and unquote(partes.username or "") == usuario
+                and unquote(partes.password or "") == senha
+                and partes.hostname == "bd"
+                and partes.port == 5432
+                and unquote(partes.path.lstrip("/")) == nome_banco
+            )
+        except ValueError:
+            url_coerente = False
+    if not url_coerente:
+        erros.append("DATABASE_URL da API diverge da configuracao do banco.")
+
     portas = banco.get("ports", [])
     if not isinstance(portas, list):
         erros.append("Formato das portas configuradas nao reconhecido.")
@@ -63,12 +93,19 @@ def validar_limite_importacao(configuracao: dict[str, Any]) -> list[str]:
     ):
         definicao = servicos.get(servico)
         ambiente = definicao.get("environment") if isinstance(definicao, dict) else None
-        limite = _inteiro_positivo(
-            ambiente.get(variavel) if isinstance(ambiente, dict) else None
-        )
-        if limite is None:
+        valores = []
+        if isinstance(ambiente, dict) and variavel in ambiente:
+            valores.append(_inteiro_positivo(ambiente.get(variavel)))
+        if servico == "interface" and isinstance(definicao, dict):
+            build = definicao.get("build")
+            argumentos = build.get("args") if isinstance(build, dict) else None
+            if isinstance(argumentos, dict) and variavel in argumentos:
+                valores.append(_inteiro_positivo(argumentos.get(variavel)))
+        if not valores or any(valor is None for valor in valores):
             return [f"{variavel} ausente ou invalido no servico {servico}."]
-        limites[servico] = limite
+        if len(set(valores)) != 1:
+            return [f"{variavel} diverge dentro do servico {servico}."]
+        limites[servico] = valores[0]
 
     if limites["servidor"] != limites["interface"]:
         return ["Limites de importacao divergem entre servidor e interface."]

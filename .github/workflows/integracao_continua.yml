@@ -43,6 +43,8 @@ jobs:
         working-directory: .
         run: |
           cp .env.example .env
+          sed -i 's/^BD_SENHA=.*/BD_SENHA=segredo-exclusivo-da-ci/' .env
+          sed -i 's|^DATABASE_URL=.*|DATABASE_URL=postgresql+psycopg://foco:segredo-exclusivo-da-ci@bd:5432/foco_ocorrencias|' .env
           python infraestrutura/scripts/verificar_banco_docker.py
 
   interface:

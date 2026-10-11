@@ -11,6 +11,15 @@
 - Workflow de release passa a executar testes de infraestrutura, tipagem e Playwright antes da publicação.
 - Atualizador usa `/opt/foco` por padrão e protege sua configuração com permissão `0600`.
 
+### Credenciais de banco protegidas - FOCO-081 - 2026-10-11
+
+- Senha padrão da instalação ativa foi substituída por segredo aleatório sem registro no Git ou nos logs.
+- PostgreSQL, API e `.env` foram alinhados e validados após a rotação.
+- Validador de infraestrutura passa a rejeitar senhas de exemplo antes da implantação.
+- `DATABASE_URL` é analisada estruturalmente e deve corresponder a usuário, senha, host, porta e banco do PostgreSQL.
+- Mensagens de validação não incluem a credencial recebida.
+- CI utiliza credencial fictícia própria, sem aceitar os placeholders distribuídos nos arquivos de exemplo.
+
 ### BI
 
 - Dashboard consolidado em `/api/v1/analytics/dashboard`, preservando os endpoints individuais.
