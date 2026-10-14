@@ -2,6 +2,14 @@
 
 ## v0.3.1 - 2026-09-17
 
+### Smoke test BI operacional - FOCO-084 - 2026-10-13
+
+- Script somente leitura valida saude da API e conexao com o banco.
+- Confere escopo SEJUSP, dimensoes globais, periodo recente, totais e evolucao mensal.
+- Verifica consistencia dos filtros nos paineis e disponibilidade da comparacao anual.
+- Compara overview e serie mensal consolidados com os endpoints individuais.
+- Saida nao inclui contagens operacionais ou registros retornados pela API.
+
 ### Criterios de aceite automatizados - FOCO-083 - 2026-10-13
 
 - Novo cenario de API valida simultaneamente periodo, tipificacao, municipio, unidade, subtipo e turno.
