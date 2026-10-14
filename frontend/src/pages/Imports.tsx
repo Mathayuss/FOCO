@@ -11,6 +11,7 @@ const limiteImportacaoMb=Number.isInteger(limiteImportacaoConfigurado) && limite
 const limiteImportacaoBytes=limiteImportacaoMb*1024*1024
 const SEJUSP_DASHBOARD_FILTERS = {source:"sejusp",period:"all",type:"",municipality:"",unit:"",subtype:"",shift:""}
 const yearList=(years?:number[])=>years?.length?years.join(", "):"-"
+const monthList=(periods?:string[]|null)=>periods===undefined?"-":periods===null?"Desconhecida":periods.length?periods.map(period=>{const [year,month]=period.split("-");return `${month}/${year}`}).join(", "):"Sem data de registro"
 const dashboardPeriod=(years?:number[])=>years?.length===1?`ano-${years[0]}`:"all"
 const dashboardFilters=(years?:number[])=>({...SEJUSP_DASHBOARD_FILTERS,period:dashboardPeriod(years)})
 const dashboardScope=(years?:number[])=>years?.length===1?`no ano ${years[0]}`:"no período importado"
@@ -118,7 +119,7 @@ export default function Imports({setGlobalFilters,onShowDashboard}:ImportsProps)
     {error && <div className="errorBox">{error}</div>}
     <div className="importNote"><b>Escopo atual</b><span>Preview, equivalência de colunas, regras mínimas, duplicidade e insert das linhas válidas.</span></div>
     <button className="importAction" disabled={!file || !preview?.can_commit || loading || committing} onClick={commitFile}>{committing?"Importando":preview?.new_rows===0?"Registrar reprocessamento":"Importar linhas válidas"}</button>
-    {commit && <div className="importResult"><b>Importação concluída</b><span>Lote #{commit.id_lote_importacao} · {commit.inserted_rows} inseridas · {commit.skipped_duplicate_rows} duplicadas · {commit.invalid_rows} inválidas</span>{dashboardReady && <><small>Fonte SEJUSP ativada {dashboardScope(commit.registration_years)}.</small><button type="button" onClick={openSejuspDashboard}>Abrir dashboard SEJUSP</button></>}</div>}
+    {commit && <div className="importResult"><b>Importação concluída</b><span>Lote #{commit.id_lote_importacao} · {commit.inserted_rows} inseridas · {commit.skipped_duplicate_rows} duplicadas · {commit.invalid_rows} inválidas</span><small>Cobertura por data de registro: {monthList(commit.registration_periods)}{commit.valid_rows_without_registration_date ? ` · ${commit.valid_rows_without_registration_date} linha(s) válida(s) sem data` : ""}.</small>{dashboardReady && <><small>Fonte SEJUSP ativada {dashboardScope(commit.registration_years)}.</small><button type="button" onClick={openSejuspDashboard}>Abrir dashboard SEJUSP</button></>}</div>}
    </section>
    <section className="panel importPanel"><header><div><b>Resumo do arquivo</b><small>Retorno da API de importação</small></div></header><div className="panelBody importSummary">
     <div className="metricRow"><span>Linhas</span><b>{preview?.total_rows ?? "-"}</b></div>
@@ -130,12 +131,14 @@ export default function Imports({setGlobalFilters,onShowDashboard}:ImportsProps)
     <div className="metricRow"><span>Importação anterior</span><b>{preview?.already_imported ? `Lote #${preview.previous_import_batch_id}` : preview ? "Não encontrada" : "-"}</b></div>
     <div className="metricRow"><span>Perfil</span><b>{preview?.source_profile?.replace("RELATORIO_","") ?? "-"}</b></div>
     <div className="metricRow"><span>Ano do registro</span><b>{yearList(preview?.registration_years)}</b></div>
+    <div className="metricRow"><span>Meses cobertos</span><b>{monthList(preview?.registration_periods)}</b></div>
+    <div className="metricRow"><span>Válidas sem data de registro</span><b>{preview?.valid_rows_without_registration_date ?? "-"}</b></div>
     <div className="metricRow"><span>Sigilo</span><b>{preview?.sensitive_rows ?? "-"}</b></div>
     <div className="metricRow"><span>Sem coordenada</span><b>{preview?.missing_coordinate_rows ?? "-"}</b></div>
    </div></section>
   </div>
   <section className="panel importHistory"><header><div><b>Lotes recentes</b><small>{batchTotal} importações registradas</small></div></header><div className="panelBody">
-   {batchError ? <div className="errorBox">{batchError}</div> : <table className="dataTable"><thead><tr><th>Lote</th><th>Arquivo</th><th>Situação</th><th>Linhas</th><th>Início</th></tr></thead><tbody>{batches.length ? batches.map(item=><tr key={item.id_lote_importacao}><td>#{item.id_lote_importacao}</td><td title={item.nome_arquivo}>{item.nome_arquivo}</td><td>{item.situacao}</td><td>{item.linhas_inseridas}/{item.total_linhas}</td><td>{dateTime(item.iniciado_em)}</td></tr>) : <tr><td colSpan={5}>Nenhum lote registrado.</td></tr>}</tbody></table>}
+   {batchError ? <div className="errorBox">{batchError}</div> : <table className="dataTable"><thead><tr><th>Lote</th><th>Arquivo</th><th>Situação</th><th>Cobertura</th><th>Linhas</th><th>Início</th></tr></thead><tbody>{batches.length ? batches.map(item=><tr key={item.id_lote_importacao}><td>#{item.id_lote_importacao}</td><td title={item.nome_arquivo}>{item.nome_arquivo}</td><td>{item.situacao}</td><td>{monthList(item.periodos_registro)}</td><td>{item.linhas_inseridas}/{item.total_linhas}</td><td>{dateTime(item.iniciado_em)}</td></tr>) : <tr><td colSpan={6}>Nenhum lote registrado.</td></tr>}</tbody></table>}
   </div></section>
   <div className="grid twoOne">
    <section className="panel"><header><div><b>Colunas</b><small>Reconhecimento canônico</small></div></header><div className="panelBody columnAudit">

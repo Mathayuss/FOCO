@@ -27,6 +27,11 @@ A migração `20260908_0002_lote_importacao.py` adiciona rastreabilidade de impo
 
 A migração `20260908_0003_lote_legado_sejusp.py` cria um lote legado para ocorrências SEJUSP já existentes que ainda não possuíam `id_lote_importacao`.
 
+A migração `20261014_0006_cobertura_temporal_lote.py` adiciona ao lote os meses
+`periodos_registro` derivados das linhas válidas e a contagem de linhas válidas
+sem data de registro. Os campos são anuláveis para preservar a distinção entre
+cobertura desconhecida de lotes antigos e uma cobertura vazia declarada.
+
 ## Passo 1 — aplicar a migração
 
 Com o banco local em Docker, copie o ambiente e suba somente o serviço de banco:

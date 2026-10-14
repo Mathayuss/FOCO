@@ -28,6 +28,8 @@ export type CsvPreview = {
   source_format:string
   source_profile:string
   registration_years:number[]
+  registration_periods:string[]
+  valid_rows_without_registration_date:number
   existing_rows:number
   new_rows:number
   column_mappings:ColumnMapping[]
@@ -48,6 +50,8 @@ export type ImportCommit = {
   source_profile:string
   source_scope:string
   registration_years:number[]
+  registration_periods:string[]
+  valid_rows_without_registration_date:number
   total_rows:number
   inserted_rows:number
   skipped_duplicate_rows:number
@@ -76,6 +80,8 @@ export type ImportBatch = {
   linhas_sensiveis:number
   linhas_coordenada_invalida:number
   linhas_sem_coordenada:number
+  periodos_registro:string[]|null
+  linhas_validas_sem_data_registro:number|null
   situacao:string
   avisos:string[]
   erro:string|null

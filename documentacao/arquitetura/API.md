@@ -86,6 +86,12 @@ GET /api/v1/imports/lotes/{id_lote_importacao}/rejeicoes
 
 `GET /api/v1/imports/lotes` aceita `limite` e `deslocamento`. As respostas usam campos em português, como `id_lote_importacao`, `nome_arquivo`, `linhas_inseridas`, `linhas_invalidas` e `situacao`.
 
+Prévia e confirmação informam `registration_periods` (`YYYY-MM`) e a quantidade
+de linhas válidas sem data de registro. O histórico do lote expõe esses valores
+como `periodos_registro` e `linhas_validas_sem_data_registro`. `periodos_registro`
+é `null` para lotes antigos sem cobertura auditável, lista vazia quando o lote
+novo não tem data de registro válida e lista de meses distintos nos demais.
+
 O preview aceita arquivos CSV, XLS ou XLSX de até 512 MB. O limite pode ser reduzido por `LIMITE_IMPORTACAO_MB` e `VITE_LIMITE_IMPORTACAO_MB`, mas não pode exceder 512 MB e deve ser igual no backend e no frontend. A validação também cobre extensão, MIME e nome. CSV aceita UTF-8 ou Windows-1252 e rejeita conteúdo binário. Arquivos XLS podem ser planilhas HTML/TSV exportadas por sistemas legados ou XLS binário antigo quando a dependência `xlrd` estiver instalada. O parser detecta `;`, tabulação, vírgula e `|`, localiza a linha real de cabeçalho quando houver título acima da tabela e limpa marcações como `<br>` nos nomes das colunas.
 
 O backend calcula tamanho e SHA-256 do upload em blocos de 1 MB sobre o arquivo temporário do multipart. O caminho CSV também valida integralmente UTF-8 e Windows-1252 e percorre as linhas incrementalmente, sem criar uma cópia integral adicional do conteúdo. Se ambas as codificações forem inválidas, prévia e confirmação retornam HTTP 400 com `CSV deve estar em UTF-8 ou Windows-1252`. A prévia conserva somente identificadores válidos, anos, contadores e até 50 rejeições; os registros normalizados completos são mantidos apenas durante a confirmação. XLS e XLSX ainda são materializados em memória pelo parser compatível; por isso somente uma prévia ou confirmação pesada é aceita simultaneamente por worker.

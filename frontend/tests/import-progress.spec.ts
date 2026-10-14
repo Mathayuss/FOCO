@@ -13,6 +13,8 @@ const preview = {
   source_format:"csv",
   source_profile:"RELATORIO_SEJUSP",
   registration_years:[2026],
+  registration_periods:["2026-10"],
+  valid_rows_without_registration_date:0,
   existing_rows:0,
   new_rows:1,
   column_mappings:[],
@@ -33,6 +35,8 @@ const commit = {
   source_profile:"RELATORIO_SEJUSP",
   source_scope:"RELATORIO_SEJUSP",
   registration_years:[2026],
+  registration_periods:["2026-10"],
+  valid_rows_without_registration_date:0,
   total_rows:1,
   inserted_rows:1,
   skipped_duplicate_rows:0,
@@ -101,6 +105,7 @@ test("mostra analise do arquivo enquanto a previa esta pendente", async ({page})
     await expect(dialog).toContainText("1 linha nova")
     await expect(page.getByText("Pronto para importar",{exact:true})).toBeVisible()
     await expect(page.locator(".metricRow.good").filter({hasText:"Válidas"})).toContainText("1 · 100%")
+    await expect(page.locator(".importSummary")).toContainText("10/2026")
     await page.keyboard.press("Shift+Tab")
     await expect(dialog.getByRole("button",{name:"Importar agora"})).toBeFocused()
     await page.keyboard.press("Tab")
@@ -138,6 +143,7 @@ test("mostra consolidacao durante a confirmacao e fecha apos concluir", async ({
     await expect(dialog.getByRole("button",{name:"Abrir dashboard"})).toBeVisible()
     await expect(page.locator(".importResult").getByText("Importação concluída",{exact:true})).toBeVisible()
     await expect(page.locator(".importResult")).toContainText("Lote #15")
+    await expect(page.locator(".importResult")).toContainText("Cobertura por data de registro: 10/2026")
     await dialog.getByRole("button",{name:"Fechar"}).click()
     await expect(dialog).toBeHidden()
   }finally{ releaseCommit() }

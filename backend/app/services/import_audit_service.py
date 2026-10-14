@@ -21,6 +21,18 @@ def _json_list(value: str | None) -> list[str]:
     return [str(parsed)]
 
 
+def _optional_json_list(value: str | None) -> list[str] | None:
+    if value is None:
+        return None
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [str(item) for item in parsed]
+
+
 def _json_dict(value: str | None) -> dict[str, str] | None:
     if not value:
         return None
@@ -53,6 +65,8 @@ def _batch_item(batch: ImportBatch) -> dict:
         "linhas_sensiveis": batch.sensitive_rows,
         "linhas_coordenada_invalida": batch.invalid_coordinate_rows,
         "linhas_sem_coordenada": batch.missing_coordinate_rows,
+        "periodos_registro": _optional_json_list(batch.registration_periods),
+        "linhas_validas_sem_data_registro": batch.valid_rows_without_registration_date,
         "situacao": batch.status,
         "avisos": _json_list(batch.warnings),
         "erro": batch.error,

@@ -23,6 +23,10 @@ class ImportBatch(Base):
     sensitive_rows: Mapped[int] = mapped_column("linhas_sensiveis", Integer, nullable=False, default=0)
     invalid_coordinate_rows: Mapped[int] = mapped_column("linhas_coordenada_invalida", Integer, nullable=False, default=0)
     missing_coordinate_rows: Mapped[int] = mapped_column("linhas_sem_coordenada", Integer, nullable=False, default=0)
+    registration_periods: Mapped[str | None] = mapped_column("periodos_registro", Text, nullable=True)
+    valid_rows_without_registration_date: Mapped[int | None] = mapped_column(
+        "linhas_validas_sem_data_registro", Integer, nullable=True
+    )
     status: Mapped[str] = mapped_column("situacao", String(40), nullable=False, default="processando", index=True)
     warnings: Mapped[str | None] = mapped_column("avisos", Text, nullable=True)
     error: Mapped[str | None] = mapped_column("erro", Text, nullable=True)

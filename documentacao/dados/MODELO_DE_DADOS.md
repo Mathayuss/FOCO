@@ -74,6 +74,8 @@ LoteImportacao
 - linhas_sensiveis
 - linhas_coordenada_invalida
 - linhas_sem_coordenada
+- periodos_registro (meses distintos YYYY-MM derivados da data de registro valida)
+- linhas_validas_sem_data_registro
 - situacao
 - avisos
 - erro
@@ -90,3 +92,5 @@ LinhaImportacaoRejeitada
 
 Cada ocorrência importada pode apontar para `id_lote_importacao`. Linhas rejeitadas
 devem preservar o payload original e os motivos de rejeição para auditoria.
+Lotes anteriores à cobertura temporal mantêm esses campos como `null`: não é
+possível inferir os meses cobertos com segurança a partir do nome do arquivo.

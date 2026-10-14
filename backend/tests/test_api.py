@@ -199,6 +199,8 @@ def test_database_model_names_are_portuguese():
         "linhas_sensiveis",
         "linhas_coordenada_invalida",
         "linhas_sem_coordenada",
+        "periodos_registro",
+        "linhas_validas_sem_data_registro",
         "situacao",
         "avisos",
         "erro",
@@ -1038,6 +1040,7 @@ def test_sejusp_analytics_uses_registration_date_year_instead_of_filename():
                 "/api/v1/imports",
                 files={"file": ("relatorio_2025.csv", content, "text/csv")},
             ).json()
+            batch = client.get(f"/api/v1/imports/lotes/{commit['id_lote_importacao']}").json()
             filters = client.get("/api/v1/analytics/filters", params={"source": "sejusp"}).json()
             params = {"source": "sejusp", "period": "2026-08", "type": type_name, "municipality": municipality}
             overview = client.get("/api/v1/analytics/overview", params=params).json()
@@ -1046,8 +1049,14 @@ def test_sejusp_analytics_uses_registration_date_year_instead_of_filename():
 
         period_by_key = {item["key"]: item for item in filters["periods"]}
         assert preview["registration_years"] == [2026]
+        assert preview["registration_periods"] == ["2026-08"]
+        assert preview["valid_rows_without_registration_date"] == 0
         assert commit["registration_years"] == [2026]
+        assert commit["registration_periods"] == ["2026-08"]
+        assert commit["valid_rows_without_registration_date"] == 0
         assert commit["inserted_rows"] == 1
+        assert batch["periodos_registro"] == ["2026-08"]
+        assert batch["linhas_validas_sem_data_registro"] == 0
         assert "ano-2026" in period_by_key
         assert period_by_key["2026-08"]["label"] == "Ago/2026"
         assert overview["total"] == 1
@@ -1378,7 +1387,39 @@ def test_csv_preview_light_mode_preserves_result_without_retaining_records():
     assert lightweight["_valid_source_ids"] == ["VALIDA-2026"]
     assert len(lightweight["issues"]) == 50
     assert lightweight["registration_years"] == [2026]
+    assert lightweight["registration_periods"] == ["2026-10"]
     assert "A prévia exibe 50 de 60 linha(s) inválida(s)" in lightweight["warnings"]
+
+
+def test_preview_nao_inventa_periodo_quando_data_de_registro_esta_ausente():
+    content = (
+        "Nº/ANO,DATA DO REGISTRO,DATA DO FATO,FATO,MUNICÍPIO\n"
+        "SEM-REGISTRO,,01/10/2025,INCENDIO,Campo Grande\n"
+    ).encode("utf-8")
+
+    preview = import_service.preview_import(content, "relatorio_2025.csv")
+
+    assert preview["registration_years"] == []
+    assert preview["registration_periods"] == []
+    assert preview["valid_rows_without_registration_date"] == 1
+    assert any("fora da cobertura temporal" in warning for warning in preview["warnings"])
+
+
+def test_historico_preserva_cobertura_desconhecida_e_tolera_json_invalido():
+    lote = ImportBatch(
+        filename="legado.csv",
+        file_hash="a" * 64,
+        file_format="csv",
+        source_profile="RELATORIO_SEJUSP",
+        source_system="RELATORIO_SEJUSP",
+        status="legado",
+        registration_periods=None,
+        valid_rows_without_registration_date=None,
+    )
+
+    assert import_audit_service._batch_item(lote)["periodos_registro"] is None
+    lote.registration_periods = "nao-json"
+    assert import_audit_service._batch_item(lote)["periodos_registro"] == []
 
 
 def test_import_preview_rejects_parallel_processing(monkeypatch):

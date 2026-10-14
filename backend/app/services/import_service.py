@@ -798,6 +798,8 @@ def _parsed_import_rows(
     seen: set[str] = set()
     valid_source_ids: list[str] = []
     registration_years: set[int] = set()
+    registration_periods: set[str] = set()
+    valid_rows_without_registration_date = 0
     valid = 0
     issue_count = 0
     sensitive_rows = 0
@@ -819,11 +821,12 @@ def _parsed_import_rows(
         if valid_row:
             valid += 1
             valid_source_ids.append(record["id_origem"])
-            registration_date = (
-                record["_registro_datetime"] or record["_abertura_datetime"]
-            )
+            registration_date = record["_registro_datetime"]
             if registration_date:
                 registration_years.add(registration_date.year)
+                registration_periods.add(registration_date.strftime("%Y-%m"))
+            else:
+                valid_rows_without_registration_date += 1
         else:
             issue_count += 1
             if len(issues) < 50:
@@ -843,6 +846,10 @@ def _parsed_import_rows(
         warnings.append(f"{invalid_coordinate_rows} linha(s) com coordenadas inválidas ou não numéricas")
     if missing_coordinate_rows:
         warnings.append(f"{missing_coordinate_rows} linha(s) sem coordenadas completas")
+    if valid_rows_without_registration_date:
+        warnings.append(
+            f"{valid_rows_without_registration_date} linha(s) válida(s) sem data de registro; fora da cobertura temporal"
+        )
     if unmapped_headers:
         warnings.append(f"{len(unmapped_headers)} coluna(s) não reconhecida(s) serão ignoradas")
     if issue_count > 50:
@@ -860,6 +867,8 @@ def _parsed_import_rows(
         "source_format": source_format,
         "source_profile": profile,
         "registration_years": sorted(registration_years),
+        "registration_periods": sorted(registration_periods),
+        "valid_rows_without_registration_date": valid_rows_without_registration_date,
         "column_mappings": mappings,
         "unmapped_headers": unmapped_headers,
         "sensitive_rows": sensitive_rows,
@@ -1069,6 +1078,8 @@ def _create_import_batch(
         sensitive_rows=parsed["sensitive_rows"],
         invalid_coordinate_rows=parsed["invalid_coordinate_rows"],
         missing_coordinate_rows=parsed["missing_coordinate_rows"],
+        registration_periods=json.dumps(parsed["registration_periods"], separators=(",", ":")),
+        valid_rows_without_registration_date=parsed["valid_rows_without_registration_date"],
         warnings=json.dumps(parsed["warnings"], ensure_ascii=False, separators=(",", ":")),
     )
     db.add(batch)
@@ -1124,6 +1135,8 @@ def _commit_parsed_import(
             "source_profile": parsed["source_profile"],
             "source_scope": sistema_origem,
             "registration_years": parsed["registration_years"],
+            "registration_periods": parsed["registration_periods"],
+            "valid_rows_without_registration_date": parsed["valid_rows_without_registration_date"],
             "total_rows": parsed["total_rows"],
             "inserted_rows": 0,
             "skipped_duplicate_rows": 0,
@@ -1198,6 +1211,8 @@ def _commit_parsed_import(
         "source_profile": parsed["source_profile"],
         "source_scope": sistema_origem,
         "registration_years": parsed["registration_years"],
+        "registration_periods": parsed["registration_periods"],
+        "valid_rows_without_registration_date": parsed["valid_rows_without_registration_date"],
         "total_rows": parsed["total_rows"],
         "inserted_rows": inserted,
         "skipped_duplicate_rows": skipped,

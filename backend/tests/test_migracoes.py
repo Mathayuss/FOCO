@@ -37,11 +37,12 @@ def test_migracao_0005_preserva_campos_e_dados_ao_reparar_chave():
         db.commit()
 
     with engine.begin() as conexao:
+        config = configuracao_migracoes()
+        config.attributes["connection"] = conexao
+        command.downgrade(config, "20260914_0005")
         operacoes = Operations(MigrationContext.configure(conexao))
         with operacoes.batch_alter_table("ocorrencia") as lote:
             lote.drop_constraint("fk_ocorrencia_lote_importacao", type_="foreignkey")
-        config = configuracao_migracoes()
-        config.attributes["connection"] = conexao
         command.stamp(config, "20260914_0004")
         command.upgrade(config, "head")
         command.check(config)

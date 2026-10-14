@@ -2,6 +2,14 @@
 
 ## v0.3.1 - 2026-09-17
 
+### Cobertura temporal dos lotes importados - FOCO-086 - 2026-10-14
+
+- Prévia, confirmação e histórico passam a declarar os meses `YYYY-MM` encontrados nas datas de registro válidas.
+- Anos analíticos da importação deixam de usar a data do fato como fallback para data de registro ausente.
+- Linhas válidas sem data de registro são contabilizadas e excluídas explicitamente da cobertura declarada.
+- Lotes existentes permanecem com cobertura desconhecida (`null`), sem inferência pelo nome do arquivo.
+- Tela de importação exibe meses cobertos e lacunas de data; migration aditiva preserva lotes existentes.
+
 ### Comparacao anual com cobertura parcial - FOCO-085 - 2026-10-14
 
 - Smoke test valida comparacao anual separadamente da verificacao mensal.

@@ -25,6 +25,8 @@ class CsvPreviewResponse(BaseModel):
     new_rows: int = 0
     source_profile: str = "FOCO"
     registration_years: list[int] = Field(default_factory=list)
+    registration_periods: list[str] = Field(default_factory=list)
+    valid_rows_without_registration_date: int = 0
     column_mappings: list[ColumnMapping] = Field(default_factory=list)
     unmapped_headers: list[str] = Field(default_factory=list)
     sensitive_rows: int = 0
@@ -44,6 +46,8 @@ class ImportCommitResponse(BaseModel):
     source_profile: str
     source_scope: str
     registration_years: list[int] = Field(default_factory=list)
+    registration_periods: list[str] = Field(default_factory=list)
+    valid_rows_without_registration_date: int = 0
     total_rows: int
     inserted_rows: int
     skipped_duplicate_rows: int
@@ -72,6 +76,8 @@ class ImportBatchResponse(BaseModel):
     linhas_sensiveis: int
     linhas_coordenada_invalida: int
     linhas_sem_coordenada: int
+    periodos_registro: list[str] | None = None
+    linhas_validas_sem_data_registro: int | None = None
     situacao: str
     avisos: list[str] = Field(default_factory=list)
     erro: str | None = None
