@@ -2,6 +2,15 @@
 
 ## v0.3.1 - 2026-09-17
 
+### Credencial exclusiva por instalacao - FOCO-082 - 2026-10-13
+
+- Novo bootstrap cria `.env` a partir do modelo com segredo aleatorio de 256 bits.
+- `BD_SENHA` e `DATABASE_URL` sao geradas de forma coerente sem exibir a credencial.
+- Escrita atomica, permissao `0600` e recusa de link simbolico protegem o arquivo.
+- Configuracoes validas existentes sao preservadas; senhas de exemplo e URLs divergentes sao bloqueadas.
+- Pacotes de release passam a exigir e incluir o bootstrap.
+- Testes cobrem criacao, idempotencia, modelo incompleto, placeholder e destino simbolico.
+
 ### Releases reproduzíveis - FOCO-079 - 2026-10-10
 
 - Compose, Dockerfile e Nginx de produção passam a ser versionados separadamente do ambiente de desenvolvimento.

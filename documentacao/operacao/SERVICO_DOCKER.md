@@ -10,11 +10,18 @@ Se o projeto mudar de pasta, ajuste o arquivo de servico antes de reinstalar.
 Execute como root, a partir da raiz do projeto:
 
 ```sh
+python3 infraestrutura/scripts/preparar_ambiente.py
+python3 infraestrutura/scripts/verificar_banco_docker.py
 install -m 0644 infraestrutura/systemd/foco.service /etc/systemd/system/foco.service
 systemctl daemon-reload
 systemctl enable --now docker.service
 systemctl enable --now foco.service
 ```
+
+O primeiro comando cria `.env` com credencial aleatoria, `DATABASE_URL`
+correspondente e permissao `0600`. Ele nao sobrescreve uma configuracao
+existente: valida e preserva ambientes coerentes e recusa senhas de exemplo.
+Execute-o antes da primeira inicializacao do volume PostgreSQL.
 
 ## Operacao
 

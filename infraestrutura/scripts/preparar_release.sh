@@ -10,7 +10,7 @@ RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
     exit 1
 }
 
-for arquivo in compose.producao.yml .env.producao.example frontend/Dockerfile.producao frontend/nginx.conf; do
+for arquivo in compose.producao.yml .env.producao.example frontend/Dockerfile.producao frontend/nginx.conf infraestrutura/scripts/preparar_ambiente.py; do
     [[ -f "$RAIZ/$arquivo" ]] || {
         printf 'Artefato de producao ausente: %s\n' "$arquivo" >&2
         exit 1

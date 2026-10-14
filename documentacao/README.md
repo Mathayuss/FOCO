@@ -56,6 +56,7 @@ Esta pasta `documentacao/` concentra a documentação técnica, normativa e oper
 - [Ciclo de vida confiavel do mapa - FOCO-074](operacao/VALIDACAO_FOCO_074.md)
 - [Releases reproduziveis - FOCO-079](operacao/VALIDACAO_FOCO_079.md)
 - [Credenciais de banco protegidas - FOCO-081](operacao/VALIDACAO_FOCO_081.md)
+- [Credencial exclusiva por instalacao - FOCO-082](operacao/VALIDACAO_FOCO_082.md)
 - [Atualizacao por releases](operacao/ATUALIZACAO_RELEASES.md)
 
 ## Observação Sobre Arquivos Importados

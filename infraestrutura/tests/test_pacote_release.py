@@ -33,6 +33,7 @@ class PacoteReleaseTests(unittest.TestCase):
                 nomes = {item.name.removeprefix("./") for item in arquivo.getmembers()}
                 self.assertNotIn(".env", nomes)
                 self.assertIn(".env.example", nomes)
+                self.assertIn("infraestrutura/scripts/preparar_ambiente.py", nomes)
 
                 def texto(nome: str) -> str:
                     membro = arquivo.getmember(f"./{nome}")

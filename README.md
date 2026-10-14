@@ -4,11 +4,16 @@ MVP com backend FastAPI e frontend React/Vite para dashboard de ocorrencias. A v
 
 ## Rodando localmente
 
-Primeiro, copie o exemplo de ambiente:
+Primeiro, gere o ambiente local. O comando cria uma credencial exclusiva, alinha
+a URL do banco e grava o arquivo com permissao `0600` sem exibir o segredo:
 
 ```bash
-cp .env.example .env
+python3 infraestrutura/scripts/preparar_ambiente.py
 ```
+
+Se um `.env` valido ja existir, ele sera validado e preservado. O comando recusa
+arquivos existentes com senha de exemplo para evitar dessincronizar um banco ja
+inicializado; nesse caso, use o procedimento controlado de rotacao.
 
 Atalhos a partir da raiz do repositório:
 
