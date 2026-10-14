@@ -59,6 +59,7 @@ Esta pasta `documentacao/` concentra a documentação técnica, normativa e oper
 - [Credencial exclusiva por instalacao - FOCO-082](operacao/VALIDACAO_FOCO_082.md)
 - [Criterios de aceite automatizados - FOCO-083](operacao/VALIDACAO_FOCO_083.md)
 - [Smoke test BI operacional - FOCO-084](operacao/VALIDACAO_FOCO_084.md)
+- [Comparacao anual com cobertura parcial - FOCO-085](operacao/VALIDACAO_FOCO_085.md)
 - [Atualizacao por releases](operacao/ATUALIZACAO_RELEASES.md)
 
 ## Observação Sobre Arquivos Importados

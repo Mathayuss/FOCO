@@ -98,6 +98,98 @@ def _periodo_recente(filtros: dict[str, Any]) -> str:
     return max(comparaveis)
 
 
+def _periodo_anual(filtros: dict[str, Any]) -> str:
+    opcoes = filtros.get("periods")
+    _exigir(isinstance(opcoes, list), "API nao retornou periodos selecionaveis.")
+    periodos = {
+        opcao["key"]
+        for opcao in opcoes
+        if isinstance(opcao, dict)
+        and isinstance(opcao.get("key"), str)
+        and re.fullmatch(r"\d{4}-\d{2}|ano-\d{4}", opcao["key"])
+    }
+    anos = sorted(
+        (int(periodo[4:]) for periodo in periodos if periodo.startswith("ano-")),
+        reverse=True,
+    )
+    for ano in anos:
+        if any(f"{ano:04d}-{mes:02d}" in periodos and f"{ano - 1:04d}-{mes:02d}" in periodos
+               for mes in range(1, 13)):
+            return f"ano-{ano:04d}"
+    raise ErroSmoke("Base SEJUSP nao possui periodo anual com meses comparaveis.")
+
+
+def _verificar_comparacao_anual(base: str, filtros: dict[str, Any], timeout: float) -> str:
+    periodo = _periodo_anual(filtros)
+    ano = int(periodo[4:])
+    painel = _get(base, "/analytics/dashboard", {"source": "sejusp", "period": periodo}, timeout)
+    overview = painel.get("overview")
+    mensal = painel.get("monthly")
+    _exigir(isinstance(overview, dict) and isinstance(mensal, dict),
+            "Dashboard anual nao retornou visao geral e evolucao.")
+    comparacao = overview.get("comparison")
+    _exigir(isinstance(comparacao, dict) and comparacao.get("available") is True,
+            "Comparacao anual indisponivel apesar de haver meses equivalentes.")
+
+    rotulo_atual = comparacao.get("current_label")
+    rotulo_base = comparacao.get("baseline_label")
+    padrao_rotulo = re.compile(r"^(?P<meses>.+)/(\d{4})$")
+    atual = padrao_rotulo.fullmatch(rotulo_atual) if isinstance(rotulo_atual, str) else None
+    anterior = padrao_rotulo.fullmatch(rotulo_base) if isinstance(rotulo_base, str) else None
+    _exigir(atual is not None and anterior is not None
+            and int(atual.group(2)) == ano
+            and int(anterior.group(2)) == ano - 1
+            and atual.group("meses") == anterior.group("meses"),
+            "Rotulos anuais nao representam os mesmos meses de anos consecutivos.")
+
+    serie = mensal.get("items")
+    _exigir(isinstance(serie, list) and bool(serie), "Serie mensal anual invalida.")
+    meses_atuais = {
+        item.get("mes")
+        for item in serie
+        if isinstance(item, dict) and isinstance(item.get("mes"), str)
+    }
+    _exigir(len(meses_atuais) == len(serie), "Serie anual contem meses sem rotulo valido.")
+
+    pontos = mensal.get("comparison")
+    _exigir(isinstance(pontos, list) and bool(pontos), "Serie anual nao retornou meses comparativos.")
+    meses_comparados: set[str] = set()
+    soma_atual = 0
+    soma_base = 0
+    padrao_mes = re.compile(r"^(?P<mes>[^/]+)/(?P<ano>\d{4})$")
+    for ponto in pontos:
+        _exigir(isinstance(ponto, dict), "Ponto da comparacao anual invalido.")
+        rotulo_mes = ponto.get("current_month")
+        rotulo_base_mes = ponto.get("baseline_month")
+        mes_atual = padrao_mes.fullmatch(rotulo_mes) if isinstance(rotulo_mes, str) else None
+        mes_base = padrao_mes.fullmatch(rotulo_base_mes) if isinstance(rotulo_base_mes, str) else None
+        _exigir(mes_atual is not None and mes_base is not None
+                and mes_atual.group("ano") == str(ano)
+                and mes_base.group("ano") == str(ano - 1)
+                and mes_atual.group("mes") == mes_base.group("mes")
+                and rotulo_mes in meses_atuais,
+                "Comparacao anual inclui meses que nao sao equivalentes.")
+        _exigir(rotulo_mes not in meses_comparados, "Comparacao anual repete um mes.")
+        atual_mes = ponto.get("current")
+        base_mes = ponto.get("baseline")
+        _exigir(isinstance(atual_mes, int) and atual_mes >= 0
+                and isinstance(base_mes, int) and base_mes >= 0,
+                "Comparacao anual contem totais mensais invalidos.")
+        meses_comparados.add(rotulo_mes)
+        soma_atual += atual_mes
+        soma_base += base_mes
+
+    _exigir(soma_atual == comparacao.get("current_total")
+            and soma_base == comparacao.get("baseline_total"),
+            "Totais anuais comparados divergem da soma dos meses equivalentes.")
+    if len(meses_comparados) < len(meses_atuais):
+        motivo = comparacao.get("reason")
+        _exigir(isinstance(motivo, str) and "limitad" in motivo.casefold()
+                and "equivalentes" in motivo.casefold(),
+                "Cobertura parcial anual nao foi explicada na resposta.")
+    return f"{rotulo_atual} vs {rotulo_base}"
+
+
 def verificar(url_api: str, timeout: float = 12) -> dict[str, Any]:
     base = _url_base(url_api)
     verificacoes: list[str] = []
@@ -162,13 +254,21 @@ def verificar(url_api: str, timeout: float = 12) -> dict[str, Any]:
     else:
         raise ErroSmoke("Comparacao com o mesmo periodo do ano anterior indisponivel na base ativa.")
 
+    comparacao_anual = _verificar_comparacao_anual(base, filtros, timeout)
+    verificacoes.append("comparacao_anual_meses_equivalentes")
+
     overview_individual = _get(base, "/analytics/overview", parametros, timeout)
     mensal_individual = _get(base, "/analytics/monthly", parametros, timeout)
     _exigir(overview_individual == overview, "Endpoint individual overview diverge do dashboard consolidado.")
     _exigir(mensal_individual == mensal, "Endpoint individual monthly diverge do dashboard consolidado.")
     verificacoes.append("consistencia_endpoints")
 
-    return {"status": "ok", "periodo_verificado": periodo, "verificacoes": verificacoes}
+    return {
+        "status": "ok",
+        "periodo_verificado": periodo,
+        "comparacao_anual": comparacao_anual,
+        "verificacoes": verificacoes,
+    }
 
 
 def main(argumentos: list[str] | None = None) -> int:

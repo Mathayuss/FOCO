@@ -2,6 +2,14 @@
 
 ## v0.3.1 - 2026-09-17
 
+### Comparacao anual com cobertura parcial - FOCO-085 - 2026-10-14
+
+- Smoke test valida comparacao anual separadamente da verificacao mensal.
+- Confere pareamento dos mesmos meses em anos consecutivos e soma dos agregados comparados.
+- Exige justificativa explicita quando a cobertura do ano atual excede os meses comparaveis.
+- A saida informa somente os rotulos dos periodos, sem expor contagens operacionais.
+- Testes isolados cobrem pareamento incorreto, soma divergente e cobertura parcial.
+
 ### Smoke test BI operacional - FOCO-084 - 2026-10-13
 
 - Script somente leitura valida saude da API e conexao com o banco.
