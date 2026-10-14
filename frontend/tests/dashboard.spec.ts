@@ -39,9 +39,23 @@ test("envia os seis filtros e persiste ao navegar e recarregar", async ({page,da
     return Object.fromEntries(Object.keys(expected).map(key => [key,params?.get(key)]))
   }).toEqual(expected)
   await expect(page.locator(".kpiValue").first()).toHaveText("4")
+  await expect(page.locator(".comparisonStrip")).toContainText("Fev/2025")
+  await expect(page.locator(".comparisonStrip")).toContainText("Fev/2024")
+
+  await page.getByRole("button",{name:"Tipificação",exact:true}).click()
+  const typeRow=page.locator(".dataTable tbody tr").filter({hasText:tipoTeste})
+  await expect(typeRow).toContainText("4")
+  await expect(typeRow).toContainText("100,0%")
+
+  await page.getByRole("button",{name:"Temporal",exact:true}).click()
+  await expect(page.locator(".kpiGrid")).toContainText("14h")
+  await expect(page.locator(".kpiGrid")).toContainText("1")
+
   await page.getByRole("button",{name:"Evolução",exact:true}).click()
   await expect(page.getByRole("heading",{name:"Evolução",exact:true})).toBeVisible()
   await expect(page.locator(".kpiValue").first()).toHaveText("4")
+  await expect(page.locator(".kpiGrid")).toContainText("Fev/2024")
+  await expect(page.locator(".kpiGrid")).toContainText("2")
   await page.reload()
   await expect(page.getByRole("heading",{name:"Evolução",exact:true})).toBeVisible()
   await expect(page.getByRole("combobox",{name:"Período",exact:true})).toHaveValue(periodoTeste)

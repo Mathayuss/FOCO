@@ -2,6 +2,15 @@
 
 ## v0.3.1 - 2026-09-17
 
+### Criterios de aceite automatizados - FOCO-083 - 2026-10-13
+
+- Novo cenario de API valida simultaneamente periodo, tipificacao, municipio, unidade, subtipo e turno.
+- Registros de controle garantem que cada dimensao exclua dados fora do recorte selecionado.
+- Teste confirma que a data de registro define o periodo e que fontes nao SEJUSP ficam fora do BI.
+- Total, evolucao, tipificacao, municipios, unidades, horarios, turnos e comparacao anual devem manter o mesmo recorte.
+- Jornada Playwright verifica filtros ativos, base comparada e resultados ao navegar entre os principais paineis.
+- Validacao visual executada nos perfis desktop, notebook e celular.
+
 ### Credencial exclusiva por instalacao - FOCO-082 - 2026-10-13
 
 - Novo bootstrap cria `.env` a partir do modelo com segredo aleatorio de 256 bits.
